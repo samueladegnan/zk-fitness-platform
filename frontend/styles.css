@@ -71,10 +71,29 @@ body {
   color: var(--text);
   white-space: nowrap;
   font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius);
+  transition: var(--transition);
+}
+
+.logo:hover {
+  color: var(--accent);
+  background: var(--bg);
+}
+
+.logo:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .logo svg {
   color: var(--accent);
+  transition: transform 0.3s ease;
+}
+
+.logo:hover svg {
+  transform: rotate(12deg) scale(1.1);
 }
 
 #active-workout-banner {
@@ -194,11 +213,15 @@ button {
   transition: var(--transition);
 }
 
-button:hover { background: var(--accent-dark); transform: translateY(-1px); }
+button:hover { background: var(--accent-dark); transform: translateY(-1px); box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25); }
 button:active { transform: scale(0.98); }
 button.secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
-button.secondary:hover { background: var(--border); }
+button.secondary:hover { background: var(--border); box-shadow: none; }
 button.link { background: transparent; color: var(--accent); border: none; padding: 0; font-weight: 500; }
+button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 .form-actions {
   display: flex;
@@ -467,6 +490,28 @@ button.small { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
   align-items: end;
 }
 
+.search-row {
+  margin: 1rem 0;
+}
+
+.search-row input {
+  width: 100%;
+  max-width: 480px;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  transition: var(--transition);
+}
+
+.search-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
 .filter-row {
   display: flex;
   flex-wrap: wrap;
@@ -483,6 +528,11 @@ button.small { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
 }
 
 .filter-row button:hover { background: var(--border); }
+.filter-row button.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
 
 .exercises-grid {
   display: grid;
@@ -515,6 +565,30 @@ button.small { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
 }
 
 .exercise-card button { margin-top: auto; font-size: 0.85rem; padding: 0.45rem 0.75rem; }
+
+.exercise-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.exercise-card-actions .btn-add-to-workout {
+  flex: 1;
+}
+
+.btn-delete-custom-ex {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--error);
+  transition: var(--transition);
+}
+
+.btn-delete-custom-ex:hover {
+  background: var(--error);
+  color: #fff;
+  border-color: var(--error);
+}
 
 /* Active workout */
 .workout-header {
@@ -1032,6 +1106,27 @@ button.small { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
 }
 
 .modal-actions button.secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+
+#app-modal-input-wrapper {
+  margin: 1rem 0 0.5rem;
+}
+
+#app-modal-input {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  transition: var(--transition);
+}
+
+#app-modal-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
 
 /* Confetti canvas */
 #confetti-canvas {

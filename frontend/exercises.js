@@ -52,11 +52,65 @@ function getExerciseById(id) {
   return EXERCISE_CATALOG.find((ex) => ex.id === id);
 }
 
-function searchExercises(query) {
-  const q = query.toLowerCase();
-  return EXERCISE_CATALOG.filter(
-    (ex) => ex.name.toLowerCase().includes(q) || ex.category.toLowerCase().includes(q)
-  );
+function searchExercises(query, catalog = EXERCISE_CATALOG) {
+  const q = query.toLowerCase().trim();
+  if (!q) return catalog;
+
+  return catalog.map((ex) => {
+    const name = ex.name.toLowerCase();
+    const category = ex.category.toLowerCase();
+    const equipment = ex.equipment.toLowerCase();
+    let score = 0;
+
+    // Strong: exact substring in name
+    if (name.includes(q)) score += 100 + q.length;
+
+    // Word prefix matches (e.g. "ben" -> "bench press")
+    const nameWords = name.split(/\s+/);
+    const queryWords = q.split(/\s+/).filter(Boolean);
+    queryWords.forEach((qw) => {
+      nameWords.forEach((w) => {
+        if (w.startsWith(qw)) score += 30;
+      });
+      if (category.startsWith(qw)) score += 20;
+      if (equipment.startsWith(qw)) score += 10;
+    });
+
+    // Fuzzy character sequence match (allows typos like "bnech" -> "bench")
+    score += fuzzySequenceScore(name, q);
+
+    // Category/equipment substring matches
+    if (category.includes(q)) score += 40;
+    if (equipment.includes(q)) score += 15;
+
+    return { ex, score };
+  })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((item) => item.ex);
+}
+
+/**
+ * Returns a score indicating how well `query` matches as a fuzzy subsequence of `text`.
+ * Higher is better. Allows small typos / skipped characters.
+ */
+function fuzzySequenceScore(text, query) {
+  if (!query) return 0;
+  let score = 0;
+  let matched = 0;
+  let lastIndex = -1;
+  for (let i = 0; i < query.length; i++) {
+    const idx = text.indexOf(query[i], lastIndex + 1);
+    if (idx !== -1) {
+      score += 5;
+      if (idx === lastIndex + 1) score += 3; // consecutive bonus
+      lastIndex = idx;
+      matched++;
+    } else {
+      score -= 2; // missing character penalty
+    }
+  }
+  return matched === query.length ? score : Math.max(0, score);
 }
 
 function getExercisesByCategory(category) {

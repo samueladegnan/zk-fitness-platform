@@ -515,6 +515,91 @@ function showToast(message, type = 'info') {
   setTimeout(() => toast.classList.remove('visible'), 4000);
 }
 
+// ─── Custom Modal (replaces alert/confirm/prompt) ───────────────────────────
+
+function openAppModal({ title = 'Confirm', message, confirmText = 'OK', cancelText = 'Cancel', prompt = false, defaultValue = '' }) {
+  return new Promise((resolve) => {
+    const modal = $('app-modal');
+    const titleEl = $('app-modal-title');
+    const messageEl = $('app-modal-message');
+    const confirmBtn = $('app-modal-confirm');
+    const cancelBtn = $('app-modal-cancel');
+    const inputWrapper = $('app-modal-input-wrapper');
+    const input = $('app-modal-input');
+
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    confirmBtn.textContent = confirmText;
+    cancelBtn.textContent = cancelText;
+    input.value = defaultValue;
+
+    if (hideCancel) {
+      cancelBtn.classList.add('hidden');
+    } else {
+      cancelBtn.classList.remove('hidden');
+    }
+
+    if (prompt) {
+      inputWrapper.classList.remove('hidden');
+      setTimeout(() => input.focus(), 50);
+    } else {
+      inputWrapper.classList.add('hidden');
+      setTimeout(() => confirmBtn.focus(), 50);
+    }
+
+    let resolved = false;
+    function cleanup() {
+      modal.classList.add('hidden');
+      inputWrapper.classList.add('hidden');
+      cancelBtn.classList.remove('hidden');
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
+      input.onkeydown = null;
+      modal.removeEventListener('click', onBackdropClick);
+      document.removeEventListener('keydown', onKeyDown);
+    }
+
+    confirmBtn.onclick = () => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve(prompt ? input.value : true);
+    };
+
+    cancelBtn.onclick = () => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve(prompt ? null : false);
+    };
+
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmBtn.click();
+      }
+    };
+
+    modal.classList.remove('hidden');
+
+    function onBackdropClick(e) {
+      if (e.target === modal) {
+        cancelBtn.click();
+      }
+    }
+
+    function onKeyDown(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelBtn.click();
+      }
+    }
+
+    modal.addEventListener('click', onBackdropClick);
+    document.addEventListener('keydown', onKeyDown);
+  });
+}
+
 function setTheme(isDark) {
   if (isDark) {
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -868,8 +953,14 @@ function renderPlans() {
   }
 }
 
-function deletePlan(planId) {
-  if (!confirm('Delete this plan? This cannot be undone.')) return;
+async function deletePlan(planId) {
+  const confirmed = await openAppModal({
+    title: 'Delete Plan',
+    message: 'Delete this plan? This cannot be undone.',
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+  });
+  if (!confirmed) return;
   session.data.plans = session.data.plans.filter((p) => p.id !== planId);
   syncDataImmediate();
   renderPlans();
@@ -982,7 +1073,12 @@ function openPlanEditor(planId) {
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 let exerciseSelectCallback = null;
@@ -995,6 +1091,11 @@ function renderExercises() {
   const filterHtml = `<div class="filter-row">${cats
     .map((c) => `<button class="filter-btn" data-cat="${c}">${c}</button>`)
     .join('')}</div>`;
+  const searchHtml = `
+    <div class="search-row">
+      <input id="exercise-search" type="search" placeholder="Search exercises (e.g. 'bench', 'bnech', 'cardio')" aria-label="Search exercises" />
+    </div>
+  `;
 
   const customForm = `
     <div class="panel custom-exercise-form">
@@ -1011,7 +1112,7 @@ function renderExercises() {
     </div>
   `;
 
-  container.innerHTML = customForm + filterHtml + '<div id="exercises-grid"></div>';
+  container.innerHTML = customForm + searchHtml + filterHtml + '<div id="exercises-grid"></div>';
 
   $('add-custom-ex').addEventListener('click', () => {
     const name = $('custom-ex-name').value.trim();
@@ -1032,20 +1133,40 @@ function renderExercises() {
     renderExercises();
   });
 
-  function renderGrid(category) {
+  function renderGrid(category, searchQuery = '') {
     const grid = $('exercises-grid');
-    const builtIn = category === 'All' ? EXERCISE_CATALOG : EXERCISE_CATALOG.filter((e) => e.category === category);
     const custom = session.data.customExercises || [];
-    const all = category === 'All' ? [...builtIn, ...custom] : [...builtIn, ...custom.filter((e) => e.category === category)];
+
+    let builtIn;
+    let all;
+    if (searchQuery.trim()) {
+      builtIn = searchExercises(searchQuery);
+      const matchedCustom = searchExercises(searchQuery, custom);
+      all = [...builtIn, ...matchedCustom];
+    } else {
+      builtIn = category === 'All' ? EXERCISE_CATALOG : EXERCISE_CATALOG.filter((e) => e.category === category);
+      all = category === 'All' ? [...builtIn, ...custom] : [...builtIn, ...custom.filter((e) => e.category === category)];
+    }
+
+    if (all.length === 0) {
+      grid.innerHTML = `<p class="muted">No exercises found. Try a different search term.</p>`;
+      return;
+    }
+
+    const customIds = new Set((session.data.customExercises || []).map((ex) => ex.id));
+    const inSelectionMode = Boolean(exerciseSelectCallback);
 
     grid.innerHTML = all
       .map(
         (ex) => `
-        <div class="exercise-card">
+        <div class="exercise-card" data-id="${ex.id}">
           <h4>${ex.name}</h4>
           <span class="tag">${ex.category}</span>
           <span class="tag">${ex.equipment}</span>
-          ${exerciseSelectCallback ? `<button class="secondary btn-add-to-workout" data-id="${ex.id}">${exerciseSelectButtonText || 'Add to Workout'}</button>` : ''}
+          <div class="exercise-card-actions">
+            ${inSelectionMode ? `<button class="secondary btn-add-to-workout" data-id="${ex.id}">${exerciseSelectButtonText || 'Add to Workout'}</button>` : ''}
+            ${!inSelectionMode && customIds.has(ex.id) ? `<button class="secondary btn-delete-custom-ex" data-id="${ex.id}" aria-label="Delete ${escapeHtml(ex.name)}">🗑</button>` : ''}
+          </div>
         </div>
       `
       )
@@ -1056,20 +1177,59 @@ function renderExercises() {
         btn.addEventListener('click', () => exerciseSelectCallback(btn.dataset.id));
       });
     }
+
+    grid.querySelectorAll('.btn-delete-custom-ex').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const confirmed = await openAppModal({
+          title: 'Delete Custom Exercise',
+          message: 'Delete this custom exercise? It will no longer appear in your catalog; existing workouts that use it will fall back to the raw exercise ID.',
+          confirmText: 'Delete',
+          cancelText: 'Cancel',
+        });
+        if (!confirmed) return;
+        session.data.customExercises = session.data.customExercises.filter((ex) => ex.id !== btn.dataset.id);
+        syncDataImmediate();
+        const activeCat = container.querySelector('.filter-btn.active')?.dataset.cat || 'All';
+        renderGrid(activeCat, searchInput ? searchInput.value : '');
+      });
+    });
+  }
+
+  const searchInput = $('exercise-search');
+  let searchDebounce;
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(searchDebounce);
+      const activeCat = container.querySelector('.filter-btn.active')?.dataset.cat || 'All';
+      searchDebounce = setTimeout(() => renderGrid(activeCat, e.target.value), 150);
+    });
   }
 
   container.querySelectorAll('.filter-btn').forEach((btn) => {
-    btn.addEventListener('click', () => renderGrid(btn.dataset.cat));
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.filter-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      const query = searchInput ? searchInput.value : '';
+      renderGrid(btn.dataset.cat, query);
+    });
   });
 
+  const initialActive = container.querySelector('[data-cat="All"]');
+  if (initialActive) initialActive.classList.add('active');
   renderGrid('All');
 }
 
-function startWorkout(planId, nameOverride) {
+async function startWorkout(planId, nameOverride) {
   const plan = planId ? session.data.plans.find((p) => p.id === planId) : null;
 
   if (getActiveWorkout()) {
-    if (!confirm('You already have an active workout. Start a new one and discard it?')) return;
+    const confirmed = await openAppModal({
+      title: 'Active Workout',
+      message: 'You already have an active workout. Start a new one and discard it?',
+      confirmText: 'Start New',
+      cancelText: 'Keep Current',
+    });
+    if (!confirmed) return;
   }
 
   const workout = {
@@ -1231,12 +1391,18 @@ function renderActiveWorkout(pastWorkoutId) {
   });
 
   container.querySelectorAll('.btn-add-warmup').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const exIdx = Number(btn.dataset.idx);
       const ex = workout.exercises[exIdx];
       let weight = findWorkingWeight(ex);
       if (!weight || weight <= 0) {
-        const input = prompt('Enter your target working weight to generate warmup sets:');
+        const input = await openAppModal({
+          title: 'Warmup Weight',
+          message: 'Enter your target working weight to generate warmup sets:',
+          prompt: true,
+          confirmText: 'Generate',
+          cancelText: 'Cancel',
+        });
         if (!input) return;
         weight = Number(input);
         if (!weight || weight <= 0) {
@@ -1251,13 +1417,18 @@ function renderActiveWorkout(pastWorkoutId) {
   });
 
   container.querySelectorAll('.btn-remove-ex').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const exIdx = Number(btn.dataset.idx);
-      if (confirm('Remove this exercise from the workout?')) {
-        workout.exercises.splice(exIdx, 1);
-        persist();
-        renderActiveWorkout(pastWorkoutId);
-      }
+      const confirmed = await openAppModal({
+        title: 'Remove Exercise',
+        message: 'Remove this exercise from the workout?',
+        confirmText: 'Remove',
+        cancelText: 'Cancel',
+      });
+      if (!confirmed) return;
+      workout.exercises.splice(exIdx, 1);
+      persist();
+      renderActiveWorkout(pastWorkoutId);
     });
   });
 
@@ -1285,11 +1456,18 @@ function renderActiveWorkout(pastWorkoutId) {
 
   const cancelBtn = isPastEdit ? $('cancel-edit') : $('cancel-workout');
   if (cancelBtn) {
-    cancelBtn.addEventListener('click', () => {
+    cancelBtn.addEventListener('click', async () => {
       if (isPastEdit) {
         showView('history-view');
         renderHistory();
-      } else if (confirm('Discard this workout?')) {
+      } else {
+        const confirmed = await openAppModal({
+          title: 'Discard Workout',
+          message: 'Discard this workout?',
+          confirmText: 'Discard',
+          cancelText: 'Keep',
+        });
+        if (!confirmed) return;
         clearActiveWorkout();
         stopGlobalTimer();
         clearInterval(restTimerInterval);
@@ -1503,7 +1681,7 @@ function renderRestTimer(exIdx) {
   }
 }
 
-function finishWorkout() {
+async function finishWorkout() {
   const workout = getActiveWorkout();
   if (!workout) return;
   workout.endTime = Date.now();
@@ -1537,8 +1715,14 @@ function finishWorkout() {
     }).length;
     return count + invalid;
   }, 0);
-  if (dropped > 0 && !confirm(`${dropped} set(s) have missing weight or reps and will be discarded. Finish anyway?`)) {
-    return;
+  if (dropped > 0) {
+    const confirmed = await openAppModal({
+      title: 'Incomplete Sets',
+      message: `${dropped} set(s) have missing weight or reps and will be discarded. Finish anyway?`,
+      confirmText: 'Finish Anyway',
+      cancelText: 'Cancel',
+    });
+    if (!confirmed) return;
   }
 
   workout.exercises = workout.exercises.filter((ex) => ex.sets.length > 0);
@@ -1660,8 +1844,14 @@ function renderHistory() {
   });
 
   container.querySelectorAll('.btn-delete-workout').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (!confirm('Delete this workout from history?')) return;
+    btn.addEventListener('click', async () => {
+      const confirmed = await openAppModal({
+        title: 'Delete Workout',
+        message: 'Delete this workout from history?',
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+      });
+      if (!confirmed) return;
       session.data.workouts = session.data.workouts.filter((w) => w.id !== btn.dataset.id);
       syncDataImmediate();
       renderHistory();
@@ -1895,8 +2085,33 @@ async function bootstrap() {
   initTheme();
   initAuthUI();
   renderNav();
+  initLogo();
   const resumeBtn = $('resume-workout-btn');
   if (resumeBtn) resumeBtn.addEventListener('click', resumeWorkout);
+}
+
+function initLogo() {
+  const logo = document.querySelector('.logo');
+  if (!logo) return;
+  logo.setAttribute('role', 'button');
+  logo.setAttribute('tabindex', '0');
+  logo.setAttribute('aria-label', 'Go to Dashboard');
+  logo.title = 'Go to Dashboard';
+  logo.addEventListener('click', () => {
+    if (isAuthenticated) {
+      showView('dashboard-view');
+      renderDashboard();
+    }
+  });
+  logo.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (isAuthenticated) {
+        showView('dashboard-view');
+        renderDashboard();
+      }
+    }
+  });
 }
 
 if (document.readyState === 'loading') {
