@@ -21,12 +21,19 @@ This platform flips the trust model. The server only stores **opaque, encrypted 
 - **Client-Side Cryptography**: Web Crypto API (AES-256-GCM) with keys derived via Argon2id from user credentials.
 - **Zero-Knowledge Storage**: Node.js/Express API + PostgreSQL stores only encrypted blobs and authentication hashes.
 - **Client-Side Gamification Engine**: XP, levels, badges, workout streaks, personal records, and progressive-overload analytics computed entirely in the browser.
-- **Built-In Exercise Database**: searchable catalog of common strength exercises.
+- **Strength & Cardio Tracking**: log weight/reps for strength exercises and distance, duration, heart rate, and calories for cardio.
+- **Built-In Exercise Database**: searchable catalog of common strength and cardio exercises.
 - **Custom Exercises**: add your own exercises on the fly with category and equipment tags.
-- **Workout Plans**: reusable plan templates for full-body, upper/lower, and custom routines.
+- **Workout Plans**: reusable plan templates for full-body, upper/lower, and custom routines with a plan editor.
 - **Active Workout Mode**: set logging with weight/reps, auto-calculated warmup sets, live workout timer, and rest timers between sets.
 - **Persistent Active Workout**: leave the workout page and come back later—the timer keeps running and progress is synced.
 - **Mid-Workout Editing**: add exercises during a workout, delete sets, and adjust reps/weight at any time.
+- **Rest Timer with +/-30s Controls**: quickly adjust rest time during a workout with a tap.
+- **Warmup Set Generator**: generate warmup sets based on your target working weight.
+- **Barbell Math**: automatic plate calculation when entering weights.
+- **Confetti & Sounds**: celebratory confetti on workout completion and audio cues for timers.
+- **Demo / Portfolio Mode**: try the app instantly without a backend; data is stored locally.
+- **Dark Mode**: toggle between light and dark themes.
 - **Mobile-First Responsive Design**: touch-friendly controls and layouts that work on Android and iOS browsers.
 - **Cross-Device Sync**: encrypted state is fetched and decrypted on any authenticated device.
 - **Production-Ready Ops**: Docker containerization, TLS 1.3/mTLS ready, GitHub Actions CI/CD.
@@ -46,7 +53,7 @@ This platform flips the trust model. The server only stores **opaque, encrypted 
 └──────────────┬───────────────────────┘
                │ HTTPS / TLS 1.3
                ▼
-───────────────────────────────────────┐
+┌──────────────────────────────────────┐
 │        Node.js / Express API         │
 │  • Stateless JWT auth                │
 │  • Stores only encrypted payloads    │

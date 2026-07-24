@@ -4,11 +4,13 @@
  * - Derives auth and encryption keys from the password using Argon2id + HKDF.
  * - Encrypts/decrypts workout data with Web Crypto API (AES-256-GCM).
  * - Runs the gamification engine (XP, tonnage, streak, levels, badges, PRs) in the browser.
+ * - NEW: Demo/portfolio mode, empty workouts, rest +/-30s, warmup helper,
+ *        barbell math, confetti, sounds, plan editor, and history editing.
  */
 
-const API_BASE = 'http://localhost:3000/api';
+const API_BASE = (typeof window !== 'undefined' && window.location.hostname !== 'localhost') ? '/api' : 'http://localhost:3000/api';
 
-// In-memory session state (never persists to disk unencrypted)
+// In-memory session state (never persists to disk unencrypted except in demo mode)
 let session = {
   username: null,
   token: null,
@@ -24,11 +26,16 @@ let session = {
 
 let isRegisterMode = true;
 let isAuthenticated = false;
+let isDemoMode = false;
 let globalTimerInterval = null;
 let restTimerInterval = null;
 let restEndTime = 0;
 let currentView = 'auth-view';
 let syncTimeout = null;
+
+// ─── Demo Mode Constants ────────────────────────────────────────────────────
+const DEMO_KEY_BASE64 = 'demo-demo-demo-demo-demo-demo-demo-demo'; // 32 bytes placeholder handled below
+const DEMO_STORAGE_KEY = 'zkfitness_demo_data';
 
 // ─── Crypto Utilities ───────────────────────────────────────────────────────
 
@@ -88,6 +95,13 @@ async function deriveKeys(masterPassword, salt) {
   return { authKey, encKey };
 }
 
+async function getDemoEncKey() {
+  // Demo mode uses a fixed, non-secret key because data lives only in localStorage.
+  const raw = new Uint8Array(32);
+  for (let i = 0; i < raw.length; i++) raw[i] = i;
+  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
 async function encryptData(data, key) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = bufferFromString(JSON.stringify(data));
@@ -108,6 +122,9 @@ async function decryptData(encrypted, key) {
 // ─── API Helpers ──────────────────────────────────────────────────────────────
 
 async function api(path, options = {}) {
+  if (isDemoMode) {
+    return demoApi(path, options);
+  }
   let res;
   try {
     res = await fetch(`${API_BASE}${path}`, {
@@ -132,14 +149,41 @@ async function api(path, options = {}) {
   return body;
 }
 
+async function demoApi(path, options) {
+  await new Promise((r) => setTimeout(r, 30)); // Simulate network latency
+  const method = options.method || 'GET';
+  if (path === '/sync' && method === 'GET') {
+    const stored = localStorage.getItem(DEMO_STORAGE_KEY);
+    return { exists: !!stored, encryptedBlob: stored };
+  }
+  if (path === '/sync' && method === 'PUT') {
+    localStorage.setItem(DEMO_STORAGE_KEY, JSON.parse(options.body).encryptedBlob);
+    return { message: 'Demo sync stored' };
+  }
+  if (path.startsWith('/auth/')) {
+    return { token: 'demo-token', username: 'Demo User' };
+  }
+  return {};
+}
+
 // ─── Gamification Engine ────────────────────────────────────────────────────
 
-function xpForSet(weight, reps) {
+function isCardioExercise(exerciseId) {
+  return getExercise(exerciseId).category === 'Cardio';
+}
+
+function xpForSet(set) {
+  // Cardio: reward duration + intensity (calories proxy)
+  if (set.durationMinutes > 0) {
+    return Math.max(10, Math.round((set.durationMinutes || 0) * 1.5 + (set.calories || 0) * 0.1));
+  }
+  const weight = set.weight || 0;
+  const reps = set.reps || 0;
   return weight > 0 && reps > 0 ? Math.round(weight * reps * 0.15) : 0;
 }
 
 function xpForWorkout(sets) {
-  const base = sets.reduce((sum, s) => sum + (s.xp || xpForSet(s.weight, s.reps)), 0);
+  const base = sets.reduce((sum, s) => sum + (s.xp || xpForSet(s)), 0);
   return base + 50;
 }
 
@@ -147,11 +191,26 @@ function totalTonnage(sets) {
   return sets.reduce((sum, s) => sum + (s.weight || 0) * (s.reps || 0), 0);
 }
 
+function totalCardioDistance(sets) {
+  return sets.reduce((sum, s) => sum + (s.distance || 0), 0);
+}
+
+function totalCardioCalories(sets) {
+  return sets.reduce((sum, s) => sum + (s.calories || 0), 0);
+}
+
+function totalCardioDuration(sets) {
+  return sets.reduce((sum, s) => sum + (s.durationMinutes || 0), 0);
+}
+
 function computeStats() {
   const workouts = session.data.workouts;
   const totalXp = workouts.reduce((sum, w) => sum + (w.xp || 0), 0);
   const tonnage = workouts.reduce((sum, w) => sum + totalTonnage(w.exercises.flatMap((e) => e.sets)), 0);
-  return { totalXp, tonnage, workouts: workouts.length };
+  const allSets = workouts.flatMap((w) => w.exercises.flatMap((e) => e.sets));
+  const distance = totalCardioDistance(allSets);
+  const calories = totalCardioCalories(allSets);
+  return { totalXp, tonnage, workouts: workouts.length, distance, calories };
 }
 
 function getLevel(totalXp) {
@@ -167,7 +226,7 @@ function xpToNextLevel(totalXp) {
 
 function computeBadges(stats) {
   const badges = [];
-  if (stats.workouts >= 1) badges.push({ id: 'first_workout', name: 'First Workout', icon: '🏋️' });
+  if (stats.workouts >= 1) badges.push({ id: 'first_workout', name: 'First Workout', icon: '️' });
   if (stats.workouts >= 10) badges.push({ id: 'dedication', name: 'Dedication', icon: '🔥' });
   if (stats.workouts >= 50) badges.push({ id: 'veteran', name: 'Veteran', icon: '💪' });
   if (stats.tonnage >= 10000) badges.push({ id: 'heavy_lifter', name: 'Heavy Lifter', icon: '🏆' });
@@ -185,7 +244,6 @@ function currentStreak() {
   last.setHours(0, 0, 0, 0);
   const daysSinceLast = Math.floor((today - last) / (1000 * 60 * 60 * 24));
 
-  // Streak is broken if the last workout was before yesterday.
   if (daysSinceLast > 1) return 0;
 
   let streak = 1;
@@ -247,9 +305,47 @@ function createSet(type = 'working') {
     weight: '',
     reps: '',
     rpe: '',
+    // Cardio fields
+    distance: '',
+    durationMinutes: '',
+    heartRate: '',
+    calories: '',
     done: false,
     xp: 0,
   };
+}
+
+function renderSetFields(exercise, set, exIndex, setIndex, isCardio) {
+  if (isCardio) {
+    return `
+      <div class="set-field">
+        <label>Dist (${session.data.preferences.units === 'kg' ? 'km' : 'mi'})</label>
+        <input type="number" step="0.1" value="${set.distance}" data-idx="${exIndex}" data-set="${setIndex}" data-field="distance" />
+      </div>
+      <div class="set-field">
+        <label>Time (min)</label>
+        <input type="number" step="0.1" value="${set.durationMinutes}" data-idx="${exIndex}" data-set="${setIndex}" data-field="durationMinutes" />
+      </div>
+      <div class="set-field">
+        <label>HR</label>
+        <input type="number" placeholder="bpm" value="${set.heartRate}" data-idx="${exIndex}" data-set="${setIndex}" data-field="heartRate" />
+      </div>
+      <div class="set-field">
+        <label>Kcal</label>
+        <input type="number" placeholder="kcal" value="${set.calories}" data-idx="${exIndex}" data-set="${setIndex}" data-field="calories" />
+      </div>
+    `;
+  }
+  return `
+    <div class="set-field">
+      <label>Weight</label>
+      <input type="number" placeholder="kg" value="${set.weight}" data-idx="${exIndex}" data-set="${setIndex}" data-field="weight" class="weight-input" />
+    </div>
+    <div class="set-field">
+      <label>Reps</label>
+      <input type="number" placeholder="reps" value="${set.reps}" data-idx="${exIndex}" data-set="${setIndex}" data-field="reps" />
+    </div>
+  `;
 }
 
 function createWorkoutExercise(exerciseId, targetSets = 3, targetReps = 8, restSeconds = null) {
@@ -275,14 +371,21 @@ function generateWarmupSets(workingWeight) {
   return warmups.map((w) => ({ weight: Math.round(workingWeight * w.factor), reps: w.reps }));
 }
 
-function addWarmupSets(workoutExercise) {
-  const lastWorkingSet = [...workoutExercise.sets].reverse().find((s) => s.type === 'working');
-  const weight = lastWorkingSet ? lastWorkingSet.weight : 0;
-  if (!weight || weight <= 0) return workoutExercise;
+function addWarmupSets(workoutExercise, workingWeight) {
+  const weight = workingWeight || findWorkingWeight(workoutExercise);
+  if (!weight || weight <= 0) return null;
   const warmups = generateWarmupSets(weight);
   const newSets = warmups.map((w) => ({ ...createSet('warmup'), weight: w.weight, reps: w.reps }));
+  // Remove existing warmup sets to avoid duplicates.
+  workoutExercise.sets = workoutExercise.sets.filter((s) => s.type !== 'warmup');
   workoutExercise.sets = [...newSets, ...workoutExercise.sets];
   return workoutExercise;
+}
+
+function findWorkingWeight(workoutExercise) {
+  const working = [...workoutExercise.sets].reverse().find((s) => s.type === 'working');
+  if (working && working.weight > 0) return working.weight;
+  return null;
 }
 
 function createPlan(name, exercises) {
@@ -360,11 +463,9 @@ function updateActiveWorkoutBanner() {
   const timer = $('active-workout-timer');
   if (timer) timer.textContent = formatDuration(workout.startTime);
 
-  // Also update the live timer inside the active workout view if visible.
   const workoutTimer = $('workout-timer');
   if (workoutTimer) workoutTimer.textContent = formatDuration(workout.startTime);
 
-  // Hide the Resume button when already on the workout view.
   const resumeBtn = $('resume-workout-btn');
   if (resumeBtn) {
     if (currentView === 'workout-view') {
@@ -390,6 +491,31 @@ function showToast(message, type = 'info') {
   toast.className = type === 'error' ? 'toast toast-error' : 'toast toast-info';
   toast.classList.add('visible');
   setTimeout(() => toast.classList.remove('visible'), 4000);
+}
+
+function setTheme(isDark) {
+  if (isDark) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+}
+
+function initTheme() {
+  const saved = localStorage.getItem('zkfitness_theme');
+  if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    setTheme(true);
+  }
+  const toggle = $('theme-toggle');
+  if (toggle) {
+    toggle.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️' : '🌙';
+    toggle.addEventListener('click', () => {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      setTheme(!isDark);
+      localStorage.setItem('zkfitness_theme', isDark ? 'light' : 'dark');
+      toggle.textContent = isDark ? '🌙' : '☀️';
+    });
+  }
 }
 
 function initAuthUI() {
@@ -437,6 +563,36 @@ function initAuthUI() {
       $('auth-error').textContent = err.message;
     }
   });
+
+  const demoBtn = $('demo-mode-btn');
+  if (demoBtn) {
+    demoBtn.addEventListener('click', startDemoMode);
+  }
+}
+
+async function startDemoMode() {
+  try {
+    isDemoMode = true;
+    session.username = 'Demo User';
+    session.token = 'demo-token';
+    session.encKey = await getDemoEncKey();
+    session.salt = new Uint8Array(32);
+
+    const res = await api('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username: 'demo', authKeyHash: 'demo' }),
+    });
+    session.token = res.token;
+
+    isAuthenticated = true;
+    renderNav();
+    await loadSync();
+    showView('dashboard-view');
+    renderDashboard();
+    showToast('Demo mode active — your data is stored locally', 'info');
+  } catch (err) {
+    $('auth-error').textContent = err.message;
+  }
 }
 
 function showView(viewId) {
@@ -458,11 +614,13 @@ function renderNav() {
   nav.innerHTML = `
     <button class="link" id="nav-dashboard">Dashboard</button>
     <button class="link" id="nav-plans">Plans</button>
+    <button class="link" id="nav-history">History</button>
     <button class="link" id="nav-exercises">Exercises</button>
     <button class="link" id="nav-logout">Log out</button>
   `;
   $('nav-dashboard').addEventListener('click', () => { showView('dashboard-view'); renderDashboard(); });
   $('nav-plans').addEventListener('click', () => { showView('plans-view'); renderPlans(); });
+  $('nav-history').addEventListener('click', () => { showView('history-view'); renderHistory(); });
   $('nav-exercises').addEventListener('click', () => { showView('exercises-view'); renderExercises(); });
   $('nav-logout').addEventListener('click', logout);
 }
@@ -483,12 +641,18 @@ function logout() {
   stopGlobalTimer();
   clearInterval(restTimerInterval);
   isAuthenticated = false;
+  isDemoMode = false;
   renderNav();
   showView('auth-view');
   $('auth-error').textContent = 'You have been logged out.';
 }
 
 function renderDashboard() {
+  const startEmptyBtn = $('start-empty-workout');
+  if (startEmptyBtn) {
+    startEmptyBtn.onclick = () => startEmptyWorkout();
+  }
+
   const stats = computeStats();
   const level = getLevel(stats.totalXp);
   const xpInfo = xpToNextLevel(stats.totalXp);
@@ -496,7 +660,6 @@ function renderDashboard() {
   const recentPRs = getRecentPRs();
   const units = session.data.preferences.units || 'kg';
 
-  // Bind units toggle button if present.
   const unitsBtn = $('units-toggle');
   if (unitsBtn) {
     unitsBtn.textContent = `Units: ${units}`;
@@ -512,6 +675,8 @@ function renderDashboard() {
   $('stat-workouts').textContent = stats.workouts;
   $('stat-streak').textContent = currentStreak();
   $('stat-level').textContent = level;
+  $('stat-distance').textContent = `${stats.distance.toFixed(1)} ${session.data.preferences.units === 'kg' ? 'km' : 'mi'}`;
+  $('stat-calories').textContent = `${stats.calories.toLocaleString()} kcal`;
 
   const progressPercent = Math.min(100, Math.round((xpInfo.current / xpInfo.range) * 100));
   $('xp-progress').style.width = `${progressPercent}%`;
@@ -538,7 +703,7 @@ function renderDashboard() {
   tbody.innerHTML = '';
   if (recent.length === 0) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="5" class="muted">No workouts yet. Start one from the Plans tab.</td>`;
+    tr.innerHTML = `<td colspan="5" class="muted">No workouts yet. Start one from the Plans tab or the button below.</td>`;
     tbody.appendChild(tr);
   } else {
     recent.forEach((w) => {
@@ -555,6 +720,10 @@ function renderDashboard() {
 
 function renderPlans() {
   const list = $('plans-list');
+  const startEmptyPlansBtn = $('start-empty-workout-plans');
+  if (startEmptyPlansBtn) {
+    startEmptyPlansBtn.onclick = () => startEmptyWorkout();
+  }
   if (session.data.plans.length === 0) {
     session.data.plans = seedPlans();
     syncData();
@@ -573,6 +742,8 @@ function renderPlans() {
         </ul>
         <div class="plan-actions">
           <button class="btn-start" data-id="${plan.id}">Start Workout</button>
+          <button class="secondary btn-edit-plan" data-id="${plan.id}">Edit</button>
+          <button class="secondary btn-delete-plan" data-id="${plan.id}">🗑</button>
         </div>
       </div>
     `
@@ -582,12 +753,142 @@ function renderPlans() {
   list.querySelectorAll('.btn-start').forEach((btn) =>
     btn.addEventListener('click', () => startWorkout(btn.dataset.id))
   );
+  list.querySelectorAll('.btn-edit-plan').forEach((btn) =>
+    btn.addEventListener('click', () => openPlanEditor(btn.dataset.id))
+  );
+  list.querySelectorAll('.btn-delete-plan').forEach((btn) =>
+    btn.addEventListener('click', () => deletePlan(btn.dataset.id))
+  );
+
+  const createBtn = $('create-plan-btn');
+  if (createBtn) {
+    createBtn.onclick = () => openPlanEditor(null);
+  }
+}
+
+function deletePlan(planId) {
+  if (!confirm('Delete this plan? This cannot be undone.')) return;
+  session.data.plans = session.data.plans.filter((p) => p.id !== planId);
+  syncDataImmediate();
+  renderPlans();
+}
+
+let planEditorDraft = null;
+let planEditorCallback = null;
+
+function openPlanEditor(planId) {
+  showView('plan-editor-view');
+  const container = $('plan-editor');
+  const isNew = !planId;
+  planEditorDraft = isNew
+    ? { id: crypto.randomUUID(), name: 'New Plan', createdAt: new Date().toISOString(), exercises: [] }
+    : JSON.parse(JSON.stringify(session.data.plans.find((p) => p.id === planId)));
+
+  $('plan-editor-title').textContent = isNew ? 'Create Plan' : 'Edit Plan';
+
+  function renderEditor() {
+    container.innerHTML = `
+      <div class="panel">
+        <label>Plan Name</label>
+        <input id="plan-name-input" type="text" value="${escapeHtml(planEditorDraft.name)}" />
+        <div class="plan-editor-actions">
+          <button id="save-plan-btn" class="btn-start">Save Plan</button>
+          <button id="cancel-plan-btn" class="secondary">Cancel</button>
+          <button id="add-exercise-to-plan" class="secondary">+ Add Exercise</button>
+        </div>
+      </div>
+      <div id="plan-exercises-list" class="plan-exercises-edit">
+        ${planEditorDraft.exercises
+          .map(
+            (e, idx) => `
+          <div class="plan-exercise-row" data-idx="${idx}">
+            <div class="plan-exercise-info">
+              <strong>${getExercise(e.exerciseId).name}</strong>
+              <span>${e.targetSets} sets × ${e.targetReps} reps • ${e.restSeconds}s rest</span>
+            </div>
+            <div class="plan-exercise-fields">
+              <label>Sets <input type="number" data-idx="${idx}" data-field="targetSets" value="${e.targetSets}" /></label>
+              <label>Reps <input type="number" data-idx="${idx}" data-field="targetReps" value="${e.targetReps}" /></label>
+              <label>Rest <input type="number" data-idx="${idx}" data-field="restSeconds" value="${e.restSeconds}" /></label>
+            </div>
+            <button class="secondary btn-remove-plan-ex" data-idx="${idx}">Remove</button>
+          </div>
+        `
+          )
+          .join('')}
+      </div>
+    `;
+
+    $('save-plan-btn').addEventListener('click', () => {
+      const name = $('plan-name-input').value.trim();
+      if (!name) {
+        showToast('Plan name is required.', 'error');
+        return;
+      }
+      planEditorDraft.name = name;
+      const idx = session.data.plans.findIndex((p) => p.id === planEditorDraft.id);
+      if (idx >= 0) {
+        session.data.plans[idx] = planEditorDraft;
+      } else {
+        session.data.plans.push(planEditorDraft);
+      }
+      syncDataImmediate();
+      showView('plans-view');
+      renderPlans();
+    });
+
+    $('cancel-plan-btn').addEventListener('click', () => {
+      showView('plans-view');
+      renderPlans();
+    });
+
+    $('add-exercise-to-plan').addEventListener('click', () => {
+      planEditorCallback = (exerciseId) => {
+        planEditorCallback = null;
+        planEditorDraft.exercises.push(createWorkoutExercise(exerciseId));
+        renderEditor();
+      };
+      showView('exercises-view');
+      exerciseSelectCallback = (exerciseId) => {
+        if (planEditorCallback) {
+          planEditorCallback(exerciseId);
+        }
+      };
+      exerciseSelectButtonText = 'Add to Plan';
+      renderExercises();
+    });
+
+    container.querySelectorAll('.plan-exercise-fields input').forEach((input) => {
+      input.addEventListener('change', (e) => {
+        const idx = Number(e.target.dataset.idx);
+        const field = e.target.dataset.field;
+        const val = e.target.value === '' ? 0 : Number(e.target.value);
+        planEditorDraft.exercises[idx][field] = val;
+      });
+    });
+
+    container.querySelectorAll('.btn-remove-plan-ex').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.idx);
+        planEditorDraft.exercises.splice(idx, 1);
+        renderEditor();
+      });
+    });
+  }
+
+  renderEditor();
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 let exerciseSelectCallback = null;
+let exerciseSelectButtonText = 'Add to Workout';
 
 function renderExercises() {
   const container = $('exercises-list');
+  exerciseSelectButtonText = 'Add to Workout';
   const cats = ['All', ...new Set(EXERCISE_CATALOG.map((e) => e.category))];
   const filterHtml = `<div class="filter-row">${cats
     .map((c) => `<button class="filter-btn" data-cat="${c}">${c}</button>`)
@@ -642,7 +943,7 @@ function renderExercises() {
           <h4>${ex.name}</h4>
           <span class="tag">${ex.category}</span>
           <span class="tag">${ex.equipment}</span>
-          ${exerciseSelectCallback ? `<button class="secondary btn-add-to-workout" data-id="${ex.id}">Add to Workout</button>` : ''}
+          ${exerciseSelectCallback ? `<button class="secondary btn-add-to-workout" data-id="${ex.id}">${exerciseSelectButtonText || 'Add to Workout'}</button>` : ''}
         </div>
       `
       )
@@ -662,9 +963,8 @@ function renderExercises() {
   renderGrid('All');
 }
 
-function startWorkout(planId) {
-  const plan = session.data.plans.find((p) => p.id === planId);
-  if (!plan) return;
+function startWorkout(planId, nameOverride) {
+  const plan = planId ? session.data.plans.find((p) => p.id === planId) : null;
 
   if (getActiveWorkout()) {
     if (!confirm('You already have an active workout. Start a new one and discard it?')) return;
@@ -672,11 +972,11 @@ function startWorkout(planId) {
 
   const workout = {
     id: crypto.randomUUID(),
-    planId: plan.id,
-    name: plan.name,
+    planId: plan ? plan.id : null,
+    name: nameOverride || (plan ? plan.name : 'Freestyle Workout'),
     date: new Date().toISOString(),
     startTime: Date.now(),
-    exercises: plan.exercises.map((e) => createWorkoutExercise(e.exerciseId, e.targetSets, e.targetReps, e.restSeconds)),
+    exercises: plan ? plan.exercises.map((e) => createWorkoutExercise(e.exerciseId, e.targetSets, e.targetReps, e.restSeconds)) : [],
     setsCount: 0,
     xp: 0,
   };
@@ -687,6 +987,10 @@ function startWorkout(planId) {
   renderActiveWorkout();
 }
 
+function startEmptyWorkout() {
+  startWorkout(null, 'Freestyle Workout');
+}
+
 function resumeWorkout() {
   const workout = getActiveWorkout();
   if (!workout) return;
@@ -694,13 +998,14 @@ function resumeWorkout() {
   renderActiveWorkout();
 }
 
-function renderActiveWorkout() {
-  const workout = getActiveWorkout();
+function renderActiveWorkout(pastWorkoutId) {
+  const workout = pastWorkoutId ? session.data.workouts.find((w) => w.id === pastWorkoutId) : getActiveWorkout();
   if (!workout) return;
+  const isPastEdit = !!pastWorkoutId;
+  const persist = () => { if (!isPastEdit) setActiveWorkout(workout); };
   const view = $('workout-view');
 
-  // Restore an active rest timer when returning to the workout view.
-  if (workout.restUntil && workout.restUntil > Date.now()) {
+  if (!isPastEdit && workout.restUntil && workout.restUntil > Date.now()) {
     clearInterval(restTimerInterval);
     restTimerInterval = null;
     restEndTime = workout.restUntil;
@@ -710,15 +1015,15 @@ function renderActiveWorkout() {
   view.innerHTML = `
     <div class="workout-header">
       <div>
-        <h2>${workout.name}</h2>
-        <div class="timer" id="workout-timer">${formatDuration(workout.startTime)}</div>
+        <h2>${workout.name}${isPastEdit ? ' (History Edit)' : ''}</h2>
+        ${isPastEdit ? `<div class="muted">${new Date(workout.date).toLocaleString()}</div>` : `<div class="timer" id="workout-timer">${formatDuration(workout.startTime)}</div>`}
       </div>
       <div class="rest-big" id="rest-big"></div>
     </div>
     <div id="active-exercises"></div>
     <div class="workout-actions">
-      <button id="finish-workout" class="btn-finish">Finish Workout</button>
-      <button id="cancel-workout" class="secondary">Cancel</button>
+      <button id="finish-workout" class="btn-finish">${isPastEdit ? 'Save Changes' : 'Finish Workout'}</button>
+      ${isPastEdit ? '<button id="cancel-edit" class="secondary">Cancel</button>' : '<button id="cancel-workout" class="secondary">Cancel</button>'}
     </div>
   `;
 
@@ -727,16 +1032,17 @@ function renderActiveWorkout() {
     .map((exercise, exIndex) => {
       const ex = getExercise(exercise.exerciseId);
       const pr = getPR(exercise.exerciseId);
+      const isCardio = isCardioExercise(exercise.exerciseId);
       return `
         <div class="active-exercise" data-idx="${exIndex}">
           <div class="active-exercise-header">
             <div class="exercise-title-row">
               <div class="drag-handle" role="button" aria-label="Drag to reorder" tabindex="0" data-idx="${exIndex}">☰</div>
-              <button class="secondary btn-move" data-dir="up" data-idx="${exIndex}" ${exIndex === 0 ? 'disabled' : ''} aria-label="Move exercise up">↑</button>
-              <button class="secondary btn-move" data-dir="down" data-idx="${exIndex}" ${exIndex === workout.exercises.length - 1 ? 'disabled' : ''} aria-label="Move exercise down">↓</button>
+              ${isPastEdit ? '' : `<button class="secondary btn-move" data-dir="up" data-idx="${exIndex}" ${exIndex === 0 ? 'disabled' : ''} aria-label="Move exercise up">↑</button>`}
+              ${isPastEdit ? '' : `<button class="secondary btn-move" data-dir="down" data-idx="${exIndex}" ${exIndex === workout.exercises.length - 1 ? 'disabled' : ''} aria-label="Move exercise down">↓</button>`}
               <div>
                 <h3>${ex.name}</h3>
-                ${pr.weight > 0 ? `<span class="pr-badge">PR ${pr.weight}${session.data.preferences.units} × ${pr.reps}</span>` : ''}
+                ${!isCardio && pr.weight > 0 ? `<span class="pr-badge">PR ${pr.weight}${session.data.preferences.units} × ${pr.reps}</span>` : ''}
               </div>
             </div>
             <div class="exercise-actions">
@@ -745,7 +1051,7 @@ function renderActiveWorkout() {
                 <input type="number" value="${exercise.restSeconds}" data-idx="${exIndex}" data-field="restSeconds" />
                 <span>s</span>
               </div>
-              <button class="secondary btn-add-warmup" data-idx="${exIndex}">+ Warmup</button>
+              ${!isCardio ? `<button class="secondary btn-add-warmup" data-idx="${exIndex}">+ Warmup</button>` : ''}
               <button class="secondary btn-remove-ex" data-idx="${exIndex}">Remove</button>
             </div>
           </div>
@@ -753,16 +1059,9 @@ function renderActiveWorkout() {
             ${exercise.sets
               .map(
                 (set, setIndex) => `
-              <div class="set-row ${set.type}" data-set-idx="${setIndex}">
-                <span class="set-type">${set.type === 'warmup' ? 'W' : 'S'}</span>
-                <div class="set-field">
-                  <label>Weight</label>
-                  <input type="number" placeholder="kg" value="${set.weight}" data-idx="${exIndex}" data-set="${setIndex}" data-field="weight" />
-                </div>
-                <div class="set-field">
-                  <label>Reps</label>
-                  <input type="number" placeholder="reps" value="${set.reps}" data-idx="${exIndex}" data-set="${setIndex}" data-field="reps" />
-                </div>
+              <div class="set-row ${set.type} ${isCardio ? 'cardio' : ''}" data-set-idx="${setIndex}">
+                <span class="set-type">${set.type === 'warmup' ? 'W' : isCardio ? 'C' : 'S'}</span>
+                ${renderSetFields(exercise, set, exIndex, setIndex, isCardio)}
                 <button class="set-done ${set.done ? 'done' : ''}" data-idx="${exIndex}" data-set="${setIndex}">✓</button>
                 <button class="secondary btn-delete-set" data-idx="${exIndex}" data-set="${setIndex}">🗑</button>
               </div>
@@ -787,7 +1086,7 @@ function renderActiveWorkout() {
       } else {
         workout.exercises[exIdx].sets[setIdx][field] = e.target.value === '' ? '' : Number(e.target.value);
       }
-      setActiveWorkout(workout);
+      persist();
     });
   });
 
@@ -796,14 +1095,17 @@ function renderActiveWorkout() {
       const exIdx = Number(btn.dataset.idx);
       const setIdx = Number(btn.dataset.set);
       const set = workout.exercises[exIdx].sets[setIdx];
-      // Convert any string inputs to numbers before computing XP.
       set.weight = set.weight === '' ? 0 : Number(set.weight);
       set.reps = set.reps === '' ? 0 : Number(set.reps);
+      set.distance = set.distance === '' ? 0 : Number(set.distance);
+      set.durationMinutes = set.durationMinutes === '' ? 0 : Number(set.durationMinutes);
+      set.heartRate = set.heartRate === '' ? 0 : Number(set.heartRate);
+      set.calories = set.calories === '' ? 0 : Number(set.calories);
       set.done = !set.done;
-      set.xp = set.done ? xpForSet(set.weight, set.reps) : 0;
-      setActiveWorkout(workout);
-      renderActiveWorkout();
-      if (set.done) startRestTimer(exIdx, workout.exercises[exIdx].restSeconds);
+      set.xp = set.done ? xpForSet(set) : 0;
+      persist();
+      renderActiveWorkout(pastWorkoutId);
+      if (!isPastEdit && set.done) startRestTimer(exIdx, workout.exercises[exIdx].restSeconds);
     });
   });
 
@@ -811,8 +1113,8 @@ function renderActiveWorkout() {
     btn.addEventListener('click', () => {
       const exIdx = Number(btn.dataset.idx);
       workout.exercises[exIdx].sets.push(createSet('working'));
-      setActiveWorkout(workout);
-      renderActiveWorkout();
+      persist();
+      renderActiveWorkout(pastWorkoutId);
     });
   });
 
@@ -821,17 +1123,28 @@ function renderActiveWorkout() {
       const exIdx = Number(btn.dataset.idx);
       const setIdx = Number(btn.dataset.set);
       workout.exercises[exIdx].sets.splice(setIdx, 1);
-      setActiveWorkout(workout);
-      renderActiveWorkout();
+      persist();
+      renderActiveWorkout(pastWorkoutId);
     });
   });
 
   container.querySelectorAll('.btn-add-warmup').forEach((btn) => {
     btn.addEventListener('click', () => {
       const exIdx = Number(btn.dataset.idx);
-      workout.exercises[exIdx] = addWarmupSets(workout.exercises[exIdx]);
-      setActiveWorkout(workout);
-      renderActiveWorkout();
+      const ex = workout.exercises[exIdx];
+      let weight = findWorkingWeight(ex);
+      if (!weight || weight <= 0) {
+        const input = prompt('Enter your target working weight to generate warmup sets:');
+        if (!input) return;
+        weight = Number(input);
+        if (!weight || weight <= 0) {
+          showToast('Please enter a valid working weight.', 'error');
+          return;
+        }
+      }
+      addWarmupSets(ex, weight);
+      persist();
+      renderActiveWorkout(pastWorkoutId);
     });
   });
 
@@ -840,43 +1153,64 @@ function renderActiveWorkout() {
       const exIdx = Number(btn.dataset.idx);
       if (confirm('Remove this exercise from the workout?')) {
         workout.exercises.splice(exIdx, 1);
-        setActiveWorkout(workout);
-        renderActiveWorkout();
+        persist();
+        renderActiveWorkout(pastWorkoutId);
       }
     });
   });
 
-  container.querySelectorAll('.btn-move').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const exIdx = Number(btn.dataset.idx);
-      const dir = btn.dataset.dir;
-      const newIdx = dir === 'up' ? exIdx - 1 : exIdx + 1;
-      if (newIdx < 0 || newIdx >= workout.exercises.length) return;
-      [workout.exercises[exIdx], workout.exercises[newIdx]] = [workout.exercises[newIdx], workout.exercises[exIdx]];
-      setActiveWorkout(workout);
-      renderActiveWorkout();
+  if (!isPastEdit) {
+    container.querySelectorAll('.btn-move').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const exIdx = Number(btn.dataset.idx);
+        const dir = btn.dataset.dir;
+        const newIdx = dir === 'up' ? exIdx - 1 : exIdx + 1;
+        if (newIdx < 0 || newIdx >= workout.exercises.length) return;
+        [workout.exercises[exIdx], workout.exercises[newIdx]] = [workout.exercises[newIdx], workout.exercises[exIdx]];
+        persist();
+        renderActiveWorkout();
+      });
     });
-  });
+  }
 
-  $('finish-workout').addEventListener('click', finishWorkout);
-  $('cancel-workout').addEventListener('click', () => {
-    if (confirm('Discard this workout?')) {
-      clearActiveWorkout();
-      stopGlobalTimer();
-      clearInterval(restTimerInterval);
-      showView('dashboard-view');
-      renderDashboard();
+  $('finish-workout').addEventListener('click', () => {
+    if (isPastEdit) {
+      savePastWorkoutChanges(workout);
+    } else {
+      finishWorkout();
     }
   });
 
-  const addExerciseBtn = document.createElement('button');
-  addExerciseBtn.className = 'secondary';
-  addExerciseBtn.textContent = '+ Add Exercise';
-  addExerciseBtn.style.marginTop = '1rem';
-  addExerciseBtn.addEventListener('click', openExerciseSelector);
-  container.appendChild(addExerciseBtn);
+  const cancelBtn = isPastEdit ? $('cancel-edit') : $('cancel-workout');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      if (isPastEdit) {
+        showView('history-view');
+        renderHistory();
+      } else if (confirm('Discard this workout?')) {
+        clearActiveWorkout();
+        stopGlobalTimer();
+        clearInterval(restTimerInterval);
+        showView('dashboard-view');
+        renderDashboard();
+      }
+    });
+  }
 
-  initExerciseDragAndDrop(container, workout);
+  if (!isPastEdit) {
+    const addExerciseBtn = document.createElement('button');
+    addExerciseBtn.className = 'secondary';
+    addExerciseBtn.textContent = '+ Add Exercise';
+    addExerciseBtn.style.marginTop = '1rem';
+    addExerciseBtn.addEventListener('click', openExerciseSelector);
+    container.appendChild(addExerciseBtn);
+  }
+
+  if (!isPastEdit) {
+    initExerciseDragAndDrop(container, workout);
+  }
+
+  initWeightInputPopover(container);
 }
 
 function initExerciseDragAndDrop(container, workout) {
@@ -970,7 +1304,6 @@ function initExerciseDragAndDrop(container, workout) {
 
     if (!hasMoved) return;
 
-    // Re-map the workout.exercises array based on the new DOM order.
     const newOrder = Array.from(container.querySelectorAll('.active-exercise')).map((el) => {
       const originalIdx = Number(el.dataset.idx);
       return workout.exercises[originalIdx];
@@ -983,6 +1316,7 @@ function initExerciseDragAndDrop(container, workout) {
 
 function openExerciseSelector() {
   showView('exercises-view');
+  exerciseSelectButtonText = 'Add to Workout';
   exerciseSelectCallback = (exerciseId) => {
     const workout = getActiveWorkout();
     if (workout) {
@@ -1009,31 +1343,60 @@ function startRestTimer(exIdx, seconds) {
   renderRestTimer(exIdx);
 }
 
+function changeRestTimer(seconds) {
+  const workout = getActiveWorkout();
+  if (!workout) return;
+  restEndTime = Math.max(Date.now(), restEndTime + seconds * 1000);
+  workout.restUntil = restEndTime;
+  workout.restExerciseIndex = workout.restExerciseIndex ?? 0;
+  setActiveWorkout(workout);
+  renderRestTimer(workout.restExerciseIndex);
+}
+
 function renderRestTimer(exIdx) {
   const workout = getActiveWorkout();
   const remaining = Math.max(0, Math.ceil((restEndTime - Date.now()) / 1000));
   const big = $('rest-big');
   const section = exIdx !== null ? $(`rest-${exIdx}`) : null;
 
+  const timerHtml = `
+    <div class="rest-timer">
+      Rest: ${remaining}s
+      <div class="rest-controls">
+        <button class="secondary rest-adjust" data-delta="-30">-30s</button>
+        <button class="secondary rest-adjust" data-delta="30">+30s</button>
+      </div>
+    </div>
+  `;
+  const doneHtml = `<div class="rest-timer done">Rest complete</div>`;
+
   if (remaining > 0) {
-    const html = `<div class="rest-timer">Rest: ${remaining}s</div>`;
-    if (section) section.innerHTML = html;
-    if (big) big.innerHTML = html;
+    if (section) section.innerHTML = timerHtml;
+    if (big) big.innerHTML = timerHtml;
   } else {
-    if (section) section.innerHTML = `<div class="rest-timer done">Rest complete</div>`;
-    if (big) big.innerHTML = `<div class="rest-timer done">Rest complete</div>`;
+    if (section) section.innerHTML = doneHtml;
+    if (big) big.innerHTML = doneHtml;
   }
+
+  document.querySelectorAll('.rest-adjust').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const delta = Number(btn.dataset.delta);
+      changeRestTimer(delta);
+    });
+  });
 
   if (remaining > 0 && !restTimerInterval) {
     restTimerInterval = setInterval(() => renderRestTimer(exIdx), 1000);
   } else if (remaining <= 0) {
     clearInterval(restTimerInterval);
     restTimerInterval = null;
-    // Clear persisted rest state once the timer finishes.
     if (workout) {
       delete workout.restUntil;
       delete workout.restExerciseIndex;
       setActiveWorkout(workout);
+    }
+    if (remaining === 0) {
+      playSound('rest-done');
     }
   }
 }
@@ -1045,20 +1408,31 @@ function finishWorkout() {
   workout.durationSeconds = Math.floor((workout.endTime - workout.startTime) / 1000);
 
   workout.exercises.forEach((ex) => {
+    const cardio = isCardioExercise(ex.exerciseId);
     ex.sets = ex.sets
-      .filter((s) => s.weight !== '' && s.reps !== '' && Number(s.weight) > 0 && Number(s.reps) > 0)
+      .filter((s) => {
+        if (cardio) return s.durationMinutes !== '' && Number(s.durationMinutes) > 0;
+        return s.weight !== '' && s.reps !== '' && Number(s.weight) > 0 && Number(s.reps) > 0;
+      })
       .map((s) => ({
         ...s,
         weight: Number(s.weight),
         reps: Number(s.reps),
-        xp: xpForSet(Number(s.weight), Number(s.reps)),
+        distance: Number(s.distance),
+        durationMinutes: Number(s.durationMinutes),
+        heartRate: Number(s.heartRate),
+        calories: Number(s.calories),
+        xp: xpForSet(s),
         done: true,
       }));
   });
 
-  // Warn about sets that will be dropped because they are empty/invalid.
   const dropped = workout.exercises.reduce((count, ex) => {
-    const invalid = ex.sets.filter((s) => s.weight === '' || s.reps === '' || Number(s.weight) <= 0 || Number(s.reps) <= 0).length;
+    const cardio = isCardioExercise(ex.exerciseId);
+    const invalid = ex.sets.filter((s) => {
+      if (cardio) return s.durationMinutes === '' || Number(s.durationMinutes) <= 0;
+      return s.weight === '' || s.reps === '' || Number(s.weight) <= 0 || Number(s.reps) <= 0;
+    }).length;
     return count + invalid;
   }, 0);
   if (dropped > 0 && !confirm(`${dropped} set(s) have missing weight or reps and will be discarded. Finish anyway?`)) {
@@ -1074,9 +1448,280 @@ function finishWorkout() {
   stopGlobalTimer();
   clearInterval(restTimerInterval);
   syncDataImmediate();
+  playSound('success');
+  fireConfetti();
   showView('dashboard-view');
   renderDashboard();
 }
+
+function savePastWorkoutChanges(workout) {
+  workout.exercises.forEach((ex) => {
+    const cardio = isCardioExercise(ex.exerciseId);
+    ex.sets = ex.sets
+      .filter((s) => {
+        if (cardio) return s.durationMinutes !== '' && Number(s.durationMinutes) > 0;
+        return s.weight !== '' && s.reps !== '' && Number(s.weight) > 0 && Number(s.reps) > 0;
+      })
+      .map((s) => ({
+        ...s,
+        weight: Number(s.weight),
+        reps: Number(s.reps),
+        distance: Number(s.distance),
+        durationMinutes: Number(s.durationMinutes),
+        heartRate: Number(s.heartRate),
+        calories: Number(s.calories),
+        xp: xpForSet(s),
+        done: true,
+      }));
+  });
+  workout.exercises = workout.exercises.filter((ex) => ex.sets.length > 0);
+  workout.setsCount = workout.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+  workout.xp = xpForWorkout(workout.exercises.flatMap((ex) => ex.sets));
+
+  const idx = session.data.workouts.findIndex((w) => w.id === workout.id);
+  if (idx >= 0) {
+    session.data.workouts[idx] = workout;
+  }
+  syncDataImmediate();
+  showView('history-view');
+  renderHistory();
+  showToast('Workout history updated.');
+}
+
+function formatSetSummary(ex, s) {
+  if (isCardioExercise(ex.exerciseId)) {
+    const parts = [];
+    if (s.distance > 0 && s.durationMinutes > 0) {
+      const pace = (s.durationMinutes / s.distance).toFixed(1);
+      parts.push(`${pace} min/${session.data.preferences.units === 'kg' ? 'km' : 'mi'}`);
+    }
+    if (s.distance > 0) parts.push(`${s.distance}${session.data.preferences.units === 'kg' ? 'km' : 'mi'}`);
+    if (s.durationMinutes > 0) parts.push(`${s.durationMinutes}min`);
+    if (s.calories > 0) parts.push(`${s.calories}kcal`);
+    if (s.heartRate > 0) parts.push(`${s.heartRate}bpm`);
+    return parts.join(' ');
+  }
+  return s.weight > 0 && s.reps > 0 ? `${s.weight}${session.data.preferences.units}×${s.reps}` : '';
+}
+
+function renderHistory() {
+  const container = $('history-list');
+  if (session.data.workouts.length === 0) {
+    container.innerHTML = '<p class="muted">No completed workouts yet.</p>';
+    return;
+  }
+
+  container.innerHTML = session.data.workouts
+    .map(
+      (w) => `
+      <div class="history-card" data-id="${w.id}">
+        <div class="history-header">
+          <div>
+            <h3>${w.name}</h3>
+            <span class="muted">${new Date(w.date).toLocaleString()}</span>
+          </div>
+          <div class="history-stats">
+            <span>${w.exercises.length} exercises</span>
+            <span>${w.setsCount || 0} sets</span>
+            <span>${w.xp || 0} XP</span>
+          </div>
+        </div>
+        <div class="history-exercises">
+          ${w.exercises
+            .map(
+              (ex) => `
+            <div class="history-exercise">
+              <strong>${getExercise(ex.exerciseId).name}</strong>
+              <span>${ex.sets
+                .map((s) => formatSetSummary(ex, s))
+                .filter(Boolean)
+                .join(' • ')}</span>
+            </div>
+          `
+            )
+            .join('')}
+        </div>
+        <div class="history-actions">
+          <button class="secondary btn-edit-workout" data-id="${w.id}">Edit Workout</button>
+          <button class="secondary btn-delete-workout" data-id="${w.id}">Delete</button>
+        </div>
+      </div>
+    `
+    )
+    .join('');
+
+  container.querySelectorAll('.btn-edit-workout').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      showView('workout-view');
+      renderActiveWorkout(btn.dataset.id);
+    });
+  });
+
+  container.querySelectorAll('.btn-delete-workout').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (!confirm('Delete this workout from history?')) return;
+      session.data.workouts = session.data.workouts.filter((w) => w.id !== btn.dataset.id);
+      syncDataImmediate();
+      renderHistory();
+    });
+  });
+}
+
+// ─── Barbell Math ───────────────────────────────────────────────────────────
+
+function calculatePlates(totalWeight) {
+  const units = session.data.preferences.units || 'kg';
+  const barWeight = units === 'kg' ? 20 : 45;
+  let remaining = (totalWeight - barWeight) / 2;
+  if (remaining <= 0) return { plates: [], remaining: 0, barWeight, perSide: totalWeight / 2 };
+
+  const plateValues = units === 'kg' ? [25, 20, 15, 10, 5, 2.5, 1.25] : [45, 35, 25, 10, 5, 2.5];
+  const plates = [];
+  for (const plate of plateValues) {
+    while (remaining >= plate - 0.001) {
+      plates.push(plate);
+      remaining -= plate;
+    }
+  }
+  return { plates, remaining, barWeight, perSide: (totalWeight - barWeight) / 2 };
+}
+
+function formatPlates(totalWeight) {
+  const { plates, remaining, perSide } = calculatePlates(totalWeight);
+  const units = session.data.preferences.units || 'kg';
+  if (plates.length === 0) {
+    if (totalWeight <= (units === 'kg' ? 20 : 45)) return 'Empty barbell or less';
+    return 'No standard plate combination';
+  }
+  const counts = {};
+  plates.forEach((p) => (counts[p] = (counts[p] || 0) + 1));
+  const plateStr = Object.entries(counts)
+    .map(([plate, count]) => `${count}×${plate}${units}`)
+    .join(', ');
+  return `${plateStr} per side${remaining > 0.01 ? ` (remainder ${Math.round(remaining * 100) / 100}${units})` : ''}`;
+}
+
+function initBarbellMath(container) {
+  // No-op: handled by popover below for cleaner UX.
+}
+
+function initWeightInputPopover(container) {
+  container.querySelectorAll('input.weight-input').forEach((input) => {
+    input.addEventListener('focus', () => {
+      let popover = input.parentElement.querySelector('.barbell-popover');
+      if (!popover) {
+        popover = document.createElement('div');
+        popover.className = 'barbell-popover';
+        input.parentElement.style.position = 'relative';
+        input.parentElement.appendChild(popover);
+      }
+      const weight = Number(input.value);
+      popover.textContent = weight > 0 ? formatPlates(weight) : 'Enter weight to see plates';
+      popover.classList.add('visible');
+    });
+
+    input.addEventListener('input', () => {
+      const popover = input.parentElement.querySelector('.barbell-popover');
+      const weight = Number(input.value);
+      if (popover) {
+        popover.textContent = weight > 0 ? formatPlates(weight) : 'Enter weight to see plates';
+      }
+    });
+
+    input.addEventListener('blur', () => {
+      setTimeout(() => {
+        const popover = input.parentElement.querySelector('.barbell-popover');
+        if (popover) popover.classList.remove('visible');
+      }, 200);
+    });
+  });
+}
+
+// ─── Sounds (Web Audio API) ─────────────────────────────────────────────────
+
+function playSound(type) {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+
+    function beep(freq, start, duration, vol = 0.1) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(vol, now + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
+      osc.start(now + start);
+      osc.stop(now + start + duration);
+    }
+
+    if (type === 'rest-done') {
+      beep(880, 0, 0.3, 0.15);
+      beep(880, 0.35, 0.3, 0.15);
+    } else if (type === 'success') {
+      beep(523, 0, 0.15, 0.12);
+      beep(659, 0.15, 0.15, 0.12);
+      beep(880, 0.3, 0.4, 0.15);
+    }
+  } catch (e) {
+    // Audio playback is optional; ignore errors.
+  }
+}
+
+// ─── Confetti ───────────────────────────────────────────────────────────────
+
+function fireConfetti() {
+  const canvas = $('confetti-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const particles = [];
+  const colors = ['#2563eb', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6'];
+  for (let i = 0; i < 120; i++) {
+    particles.push({
+      x: canvas.width / 2,
+      y: canvas.height / 2,
+      vx: (Math.random() - 0.5) * 18,
+      vy: (Math.random() - 1) * 18 - 4,
+      size: Math.random() * 6 + 3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      life: 1,
+    });
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let alive = false;
+    particles.forEach((p) => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.4;
+      p.life -= 0.015;
+      if (p.life > 0) {
+        alive = true;
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+    if (alive) {
+      requestAnimationFrame(animate);
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+  animate();
+}
+
+// ─── Sync ───────────────────────────────────────────────────────────────────
 
 async function loadSync() {
   try {
@@ -1089,10 +1734,10 @@ async function loadSync() {
       if (!session.data.customExercises) session.data.customExercises = [];
       if (!session.data.preferences) session.data.preferences = { defaultRestSeconds: 90, units: 'kg' };
       if (getActiveWorkout()) startGlobalTimer();
-      if ($('sync-status')) $('sync-status').textContent = 'Loaded latest encrypted state from cloud.';
+      if ($('sync-status')) $('sync-status').textContent = isDemoMode ? 'Demo data loaded from localStorage.' : 'Loaded latest encrypted state from cloud.';
     } else {
       session.data.plans = seedPlans();
-      if ($('sync-status')) $('sync-status').textContent = 'No prior sync found. Starting fresh.';
+      if ($('sync-status')) $('sync-status').textContent = isDemoMode ? 'Starting fresh demo.' : 'No prior sync found. Starting fresh.';
     }
   } catch (err) {
     if ($('sync-status')) $('sync-status').textContent = `Sync load failed: ${err.message}`;
@@ -1113,7 +1758,7 @@ async function performSync() {
       method: 'PUT',
       body: JSON.stringify({ encryptedBlob: JSON.stringify(encrypted) }),
     });
-    if (status) status.textContent = 'Encrypted state synced successfully.';
+    if (status) status.textContent = isDemoMode ? 'Demo data saved locally.' : 'Encrypted state synced successfully.';
   } catch (err) {
     if (status) status.textContent = `Sync failed: ${err.message}`;
     showToast(`Sync failed: ${err.message}`, 'error');
@@ -1121,7 +1766,6 @@ async function performSync() {
 }
 
 async function syncData() {
-  // Debounce sync so rapid edits (typing weight/reps, adding sets) don't spam the API.
   scheduleSync();
 }
 
@@ -1146,6 +1790,7 @@ async function bootstrap() {
     return;
   }
 
+  initTheme();
   initAuthUI();
   renderNav();
   const resumeBtn = $('resume-workout-btn');

@@ -4,6 +4,16 @@
  */
 
 const EXERCISE_CATALOG = [
+  // Cardio
+  { id: 'running', name: 'Running', category: 'Cardio', equipment: 'Treadmill / Outdoor', defaultRestSeconds: 60 },
+  { id: 'cycling', name: 'Cycling', category: 'Cardio', equipment: 'Bike / Stationary', defaultRestSeconds: 60 },
+  { id: 'rowing', name: 'Rowing', category: 'Cardio', equipment: 'Machine', defaultRestSeconds: 60 },
+  { id: 'elliptical', name: 'Elliptical', category: 'Cardio', equipment: 'Machine', defaultRestSeconds: 60 },
+  { id: 'swimming', name: 'Swimming', category: 'Cardio', equipment: 'Pool', defaultRestSeconds: 60 },
+  { id: 'jump_rope', name: 'Jump Rope', category: 'Cardio', equipment: 'Jump Rope', defaultRestSeconds: 45 },
+  { id: 'stairmaster', name: 'StairMaster', category: 'Cardio', equipment: 'Machine', defaultRestSeconds: 60 },
+
+  // Strength
   { id: 'squat', name: 'Squat', category: 'Legs', equipment: 'Barbell', defaultRestSeconds: 180 },
   { id: 'front_squat', name: 'Front Squat', category: 'Legs', equipment: 'Barbell', defaultRestSeconds: 180 },
   { id: 'leg_press', name: 'Leg Press', category: 'Legs', equipment: 'Machine', defaultRestSeconds: 150 },

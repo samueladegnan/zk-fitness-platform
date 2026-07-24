@@ -23,6 +23,7 @@
         <button id="resume-workout-btn" class="small">Resume</button>
       </div>
       <nav class="app-nav" id="nav"></nav>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark mode">🌙</button>
     </header>
 
     <main id="main">
@@ -40,6 +41,10 @@
               <button type="submit" id="auth-btn">Register</button>
               <button type="button" id="toggle-mode" class="link">Already have an account? Log in</button>
             </div>
+            <div class="demo-actions">
+              <button type="button" id="demo-mode-btn" class="secondary">👋 Try Demo Mode</button>
+              <p class="muted small">No account needed. Data is stored locally in your browser.</p>
+            </div>
             <p id="auth-error" class="error" role="status"></p>
           </form>
         </div>
@@ -47,6 +52,9 @@
 
       <!-- Dashboard view -->
       <section id="dashboard-view" class="view hidden">
+        <div class="panel quick-actions">
+          <button id="start-empty-workout" class="btn-start">+ Start Empty Workout</button>
+        </div>
         <div class="stats-grid">
           <div class="stat-card">
             <span class="stat-label">Level</span>
@@ -67,6 +75,14 @@
           <div class="stat-card">
             <span class="stat-label">Streak</span>
             <span class="stat-value" id="stat-streak">0</span>
+          </div>
+          <div class="stat-card cardio-stat">
+            <span class="stat-label">Cardio Distance</span>
+            <span class="stat-value" id="stat-distance">0</span>
+          </div>
+          <div class="stat-card cardio-stat">
+            <span class="stat-label">Calories</span>
+            <span class="stat-value" id="stat-calories">0</span>
           </div>
         </div>
 
@@ -104,6 +120,10 @@
       <section id="plans-view" class="view hidden">
         <div class="section-header">
           <h2>Workout Plans</h2>
+          <div class="section-actions">
+            <button id="start-empty-workout-plans" class="secondary">+ Start Empty Workout</button>
+            <button id="create-plan-btn" class="secondary">+ Create Plan</button>
+          </div>
         </div>
         <div id="plans-list" class="plans-grid"></div>
       </section>
@@ -119,7 +139,25 @@
       <section id="workout-view" class="view hidden">
         <!-- Rendered dynamically by app.js -->
       </section>
+
+      <!-- History view -->
+      <section id="history-view" class="view hidden">
+        <div class="section-header">
+          <h2>Workout History</h2>
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </section>
+
+      <!-- Plan editor view -->
+      <section id="plan-editor-view" class="view hidden">
+        <div class="section-header">
+          <h2 id="plan-editor-title">Edit Plan</h2>
+        </div>
+        <div id="plan-editor" class="plan-editor"></div>
+      </section>
     </main>
+
+    <canvas id="confetti-canvas" aria-hidden="true"></canvas>
 
     <footer class="app-footer">
       Zero-Knowledge Gamified Fitness Platform — Built by Samuel Degnan
