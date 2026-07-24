@@ -39,6 +39,53 @@ let restEndTime = 0;
 let currentView = 'auth-view';
 let syncTimeout = null;
 
+// API failure debounce: suppress toasts until a burst of failures occurs.
+let apiFailureState = { count: 0, timer: null, lastErr: null };
+const API_FAILURE_THRESHOLD = 3;
+const API_FAILURE_WINDOW_MS = 10000;
+
+
+
+function flushApiErrors() {
+  const { lastErr, onFlush } = apiFailureState;
+  if (onFlush) {
+    onFlush(lastErr);
+  } else if (lastErr) {
+    showToast(lastErr.message || 'Network error', 'error');
+  }
+  resetApiFailureState();
+}
+
+function markApiSuccess() {
+  if (apiFailureState.count > 0 || apiFailureState.timer) {
+    resetApiFailureState();
+  }
+}
+
+function reportApiError(err, onFlush) {
+  apiFailureState.count += 1;
+  apiFailureState.lastErr = err;
+  if (onFlush) apiFailureState.onFlush = onFlush;
+
+  if (apiFailureState.count >= API_FAILURE_THRESHOLD) {
+    flushApiErrors();
+    return;
+  }
+
+  if (!apiFailureState.timer) {
+    apiFailureState.timer = setTimeout(() => {
+      if (apiFailureState.count > 0) {
+        flushApiErrors();
+      }
+    }, API_FAILURE_WINDOW_MS);
+  }
+}
+
+function resetApiFailureState() {
+  clearTimeout(apiFailureState.timer);
+  apiFailureState = { count: 0, timer: null, lastErr: null, onFlush: null };
+}
+
 // ─── Demo Mode Constants ────────────────────────────────────────────────────
 const DEMO_KEY_BASE64 = 'demo-demo-demo-demo-demo-demo-demo-demo'; // 32 bytes placeholder handled below
 const DEMO_STORAGE_KEY = 'zkfitness_demo_data';
@@ -168,6 +215,7 @@ async function api(path, options = {}) {
     body = {};
   }
   if (!res.ok) throw new Error(body.error || `Server error (${res.status})`);
+  markApiSuccess();
   return body;
 }
 
@@ -339,6 +387,7 @@ function createSet(type = 'working') {
 }
 
 function renderSetFields(exercise, set, exIndex, setIndex, isCardio) {
+  const equipment = escapeHtml(getExercise(exercise.exerciseId).equipment || '');
   if (isCardio) {
     return `
       <div class="set-field">
@@ -362,7 +411,7 @@ function renderSetFields(exercise, set, exIndex, setIndex, isCardio) {
   return `
     <div class="set-field">
       <label>Weight</label>
-      <input type="number" placeholder="kg" value="${set.weight}" data-idx="${exIndex}" data-set="${setIndex}" data-field="weight" class="weight-input" />
+      <input type="number" placeholder="kg" value="${set.weight}" data-idx="${exIndex}" data-set="${setIndex}" data-field="weight" class="weight-input" data-equipment="${equipment}" />
     </div>
     <div class="set-field">
       <label>Reps</label>
@@ -1377,7 +1426,13 @@ function renderActiveWorkout(pastWorkoutId) {
       set.xp = set.done ? xpForSet(set) : 0;
       persist();
       renderActiveWorkout(pastWorkoutId);
-      if (!isPastEdit && set.done) startRestTimer(exIdx, workout.exercises[exIdx].restSeconds);
+      if (!isPastEdit) {
+        if (set.done) {
+          startRestTimer(exIdx, workout.exercises[exIdx].restSeconds);
+        } else if (workout.restExerciseIndex === exIdx) {
+          skipRestTimer();
+        }
+      }
     });
   });
 
@@ -1644,6 +1699,22 @@ function changeRestTimer(seconds) {
   renderRestTimer(workout.restExerciseIndex);
 }
 
+function skipRestTimer() {
+  clearInterval(restTimerInterval);
+  restTimerInterval = null;
+  const workout = getActiveWorkout();
+  if (workout) {
+    delete workout.restUntil;
+    delete workout.restExerciseIndex;
+    setActiveWorkout(workout);
+  }
+  const big = $('rest-big');
+  if (big) big.innerHTML = '';
+  document.querySelectorAll('.rest-section').forEach((el) => {
+    el.innerHTML = '';
+  });
+}
+
 function renderRestTimer(exIdx) {
   const workout = getActiveWorkout();
   const remaining = Math.max(0, Math.ceil((restEndTime - Date.now()) / 1000));
@@ -1656,6 +1727,7 @@ function renderRestTimer(exIdx) {
       <div class="rest-controls">
         <button class="secondary rest-adjust" data-delta="-30">-30s</button>
         <button class="secondary rest-adjust" data-delta="30">+30s</button>
+        <button class="secondary rest-skip">Skip</button>
       </div>
     </div>
   `;
@@ -1674,6 +1746,10 @@ function renderRestTimer(exIdx) {
       const delta = Number(btn.dataset.delta);
       changeRestTimer(delta);
     });
+  });
+
+  document.querySelectorAll('.rest-skip').forEach((btn) => {
+    btn.addEventListener('click', () => skipRestTimer());
   });
 
   if (remaining > 0 && !restTimerInterval) {
@@ -1923,6 +1999,7 @@ function initBarbellMath(container) {
 
 function initWeightInputPopover(container) {
   container.querySelectorAll('input.weight-input').forEach((input) => {
+    if ((input.dataset.equipment || '').toLowerCase() !== 'barbell') return;
     input.addEventListener('focus', () => {
       let popover = input.parentElement.querySelector('.barbell-popover');
       if (!popover) {
@@ -2056,7 +2133,10 @@ async function loadSync() {
       if ($('sync-status')) $('sync-status').textContent = isDemoMode ? 'Starting fresh demo.' : 'No prior sync found. Starting fresh.';
     }
   } catch (err) {
-    if ($('sync-status')) $('sync-status').textContent = `Sync load failed: ${err.message}`;
+    reportApiError(err, (failure) => {
+      if ($('sync-status')) $('sync-status').textContent = `Sync load failed: ${failure.message}`;
+      showToast(`Sync load failed: ${failure.message}`, 'error');
+    });
   }
 }
 
@@ -2068,6 +2148,7 @@ function scheduleSync() {
 async function performSync() {
   syncTimeout = null;
   const status = $('sync-status');
+  if (status) status.textContent = isDemoMode ? 'Saving demo data...' : 'Syncing encrypted state...';
   try {
     const encrypted = await encryptData(session.data, session.encKey);
     await api('/sync', {
@@ -2076,8 +2157,10 @@ async function performSync() {
     });
     if (status) status.textContent = isDemoMode ? 'Demo data saved locally.' : 'Encrypted state synced successfully.';
   } catch (err) {
-    if (status) status.textContent = `Sync failed: ${err.message}`;
-    showToast(`Sync failed: ${err.message}`, 'error');
+    reportApiError(err, (failure) => {
+      if (status) status.textContent = `Sync failed: ${failure.message}`;
+      showToast(`Sync failed: ${failure.message}`, 'error');
+    });
   }
 }
 
