@@ -21,9 +21,8 @@ const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const argon2 = require('argon2');
 const { randomBytes } = require('crypto');
-const { Pool } = require('pg');
 const cookieParser = require('cookie-parser');
-require('dotenv').config();
+const { createPool } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -67,13 +66,7 @@ app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 
 // ─── Database ───────────────────────────────────────────────────────────────
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: Number(process.env.DB_PORT || 5432),
-  user: process.env.DB_USER || 'fitness',
-  password: process.env.DB_PASSWORD || 'fitness',
-  database: process.env.DB_NAME || 'fitness_db',
-});
+const pool = createPool();
 
 // ─── Rate Limiting ──────────────────────────────────────────────────────────
 const generalLimiter = rateLimit({

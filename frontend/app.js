@@ -127,10 +127,23 @@ async function decryptData(encrypted, key) {
 
 // ─── API Helpers ──────────────────────────────────────────────────────────────
 
+function isBackendLikelyConfigured() {
+  // If API_BASE still points to localhost but the page is served from
+  // a non-localhost origin (e.g. GitHub Pages), the backend is not configured.
+  const isLocalBackend = API_BASE.includes('localhost') || API_BASE.includes('127.0.0.1');
+  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  return !isLocalBackend || isLocalHost;
+}
+
 async function api(path, options = {}) {
   if (isDemoMode) {
     return demoApi(path, options);
   }
+
+  if (!isBackendLikelyConfigured()) {
+    throw new Error('Backend not configured. The live demo requires a deployed API; please use Demo Mode for now.');
+  }
+
   let res;
   try {
     res = await fetch(`${API_BASE}${path}`, {

@@ -28,10 +28,14 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Prepare static site
+        env:
+          ZK_API_BASE: ${{ vars.ZK_API_BASE || secrets.ZK_API_BASE || 'http://localhost:3000/api' }}
         run: |
           mkdir -p site
           cp index.html demo.html architecture.html site/
           cp -r assets frontend site/
+          # Inject the production backend URL into the frontend config.
+          sed -i "s|window.ZK_API_BASE = 'http://localhost:3000/api';|window.ZK_API_BASE = '${ZK_API_BASE}';|" site/frontend/config.js
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
