@@ -43,6 +43,9 @@ let syncTimeout = null;
 const DEMO_KEY_BASE64 = 'demo-demo-demo-demo-demo-demo-demo-demo'; // 32 bytes placeholder handled below
 const DEMO_STORAGE_KEY = 'zkfitness_demo_data';
 
+// Callback for the shared security/demonstration modal.
+let securityModalCallback = null;
+
 // ─── Crypto Utilities ───────────────────────────────────────────────────────
 
 function arrayBufferToBase64(buffer) {
@@ -584,6 +587,19 @@ async function performPasswordAuth(username, password) {
   await loadSync();
   showView('dashboard-view');
   renderDashboard();
+
+  // Show the zero-knowledge security modal once after registration.
+  if (isRegisterMode) {
+    openSecurityModal('Continue', () => {});
+  }
+}
+
+function openSecurityModal(label, callback) {
+  securityModalCallback = callback;
+  const btn = $('start-demo-confirm-btn');
+  if (btn) btn.textContent = label;
+  const modal = $('demo-modal');
+  if (modal) modal.classList.remove('hidden');
 }
 
 function initAuthUI() {
@@ -626,8 +642,7 @@ function initAuthUI() {
   const demoBtn = $('demo-mode-btn');
   if (demoBtn) {
     demoBtn.addEventListener('click', () => {
-      const modal = $('demo-modal');
-      if (modal) modal.classList.remove('hidden');
+      openSecurityModal('Start Demo', startDemoMode);
     });
   }
 
@@ -636,7 +651,10 @@ function initAuthUI() {
     confirmDemoBtn.addEventListener('click', () => {
       const modal = $('demo-modal');
       if (modal) modal.classList.add('hidden');
-      startDemoMode();
+      if (securityModalCallback) {
+        securityModalCallback();
+        securityModalCallback = null;
+      }
     });
   }
 
