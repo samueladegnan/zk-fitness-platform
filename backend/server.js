@@ -1,9 +1,17 @@
 /**
- * Zero-Knowledge Gamified Fitness Platform — Backend API
+ * Zero-Knowledge Fitness Platform — Backend API
  *
  * The server provides authentication and encrypted sync only.
  * It NEVER has access to the user's master password, encryption key,
  * or plaintext workout data.
+ *
+ * Security features:
+ * - Argon2id-based zero-knowledge authentication (client derives auth key from password)
+ * - Cryptographically random per-user salts generated server-side
+ * - JWT delivered in HTTP-only, Secure, SameSite cookies
+ * - Strict per-IP and per-username rate limits on auth routes
+ * - Account lockout after repeated failed login attempts
+ * - Helmet, CORS, and CSP hardened for production
  */
 
 const express = require('express');
@@ -12,30 +20,51 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const argon2 = require('argon2');
+const { randomBytes } = require('crypto');
 const { Pool } = require('pg');
+const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
 const IS_DEV = process.env.NODE_ENV !== 'production';
+const COOKIE_NAME = 'zkfitness_session';
+const ORIGIN = process.env.CLIENT_ORIGIN || (IS_DEV ? 'http://localhost:3001' : null);
 
 // ─── Middleware ─────────────────────────────────────────────────────────────
-app.use(helmet());
-const corsOrigin = process.env.NODE_ENV === 'development'
-  ? (process.env.CLIENT_ORIGIN || true)
-  : (process.env.CLIENT_ORIGIN || '*');
-app.use(cors({ origin: corsOrigin }));
-app.use(express.json({ limit: '1mb' }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", ORIGIN],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+}));
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, please slow down.' },
-});
-app.use('/api/', limiter);
+app.use(cors({
+  origin: ORIGIN || (IS_DEV ? true : false),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+}));
+
+app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
 
 // ─── Database ───────────────────────────────────────────────────────────────
 const pool = new Pool({
@@ -46,17 +75,64 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'fitness_db',
 });
 
-// ─── Authentication ───────────────────────────────────────────────────────────
+// ─── Rate Limiting ──────────────────────────────────────────────────────────
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please slow down.' },
+});
+app.use('/api/', generalLimiter);
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
+  message: { error: 'Too many auth attempts from this IP. Please try again later.' },
+});
+
+const usernameAuthLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.body?.username || req.ip,
+  message: { error: 'Too many auth attempts for this username. Please try again later.' },
+});
+
+// ─── Authentication Helpers ─────────────────────────────────────────────────
 function generateToken(userId) {
   return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: '7d' });
 }
 
+function isCrossOrigin() {
+  // When CLIENT_ORIGIN is explicitly set, assume the frontend is hosted
+  // separately (e.g. GitHub Pages) and allow the cookie cross-site.
+  return Boolean(process.env.CLIENT_ORIGIN);
+}
+
+function setAuthCookie(res, token) {
+  res.cookie(COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: !IS_DEV,
+    sameSite: isCrossOrigin() ? 'none' : 'strict',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: '/',
+  });
+}
+
+function clearAuthCookie(res) {
+  res.clearCookie(COOKIE_NAME, { path: '/' });
+}
+
 function authenticate(req, res, next) {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Missing or invalid Authorization header' });
+  const token = req.cookies?.[COOKIE_NAME];
+  if (!token) {
+    return res.status(401).json({ error: 'Missing or invalid session' });
   }
-  const token = auth.slice(7);
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     req.userId = payload.sub;
@@ -66,36 +142,82 @@ function authenticate(req, res, next) {
   }
 }
 
+function randomSalt() {
+  return randomBytes(32).toString('base64');
+}
+
+// ─── Account Lockout ───────────────────────────────────────────────────────
+const MAX_FAILED_ATTEMPTS = 5;
+
+async function recordFailedLogin(username) {
+  await pool.query(
+    `INSERT INTO failed_login_attempts (username, last_attempt)
+     VALUES ($1, NOW())
+     ON CONFLICT (username) DO UPDATE SET
+       attempt_count = failed_login_attempts.attempt_count + 1,
+       last_attempt = NOW(),
+       locked_until = CASE
+         WHEN failed_login_attempts.attempt_count + 1 >= $2 THEN NOW() + interval '30 minutes'
+         ELSE failed_login_attempts.locked_until
+       END`,
+    [username, MAX_FAILED_ATTEMPTS]
+  );
+}
+
+async function resetFailedLogin(username) {
+  await pool.query('DELETE FROM failed_login_attempts WHERE username = $1', [username]);
+}
+
+async function isAccountLocked(username) {
+  const result = await pool.query(
+    'SELECT locked_until FROM failed_login_attempts WHERE username = $1',
+    [username]
+  );
+  if (result.rows.length === 0) return false;
+  const lockedUntil = result.rows[0].locked_until;
+  if (!lockedUntil) return false;
+  return new Date(lockedUntil) > new Date();
+}
+
 // ─── Routes ─────────────────────────────────────────────────────────────────
 
 /**
  * POST /api/auth/register
  * Body: { username, authKeyHash, salt }
- *   - username: unique display name
- *   - authKeyHash: the client-derived authentication key, hashed again server-side
- *   - salt: the Argon2 salt used by the client (hex/base64)
  *
- * The server never receives the master password or the encryption key.
+ * The client still derives authKeyHash from their password. To strengthen
+ * the system, the server now generates a random per-user salt and returns
+ * it. The client should re-derive using this server salt for future logins.
  */
-app.post('/api/auth/register', async (req, res, next) => {
+app.post('/api/auth/register', authLimiter, usernameAuthLimiter, async (req, res, next) => {
   try {
-    const { username, authKeyHash, salt } = req.body;
-    if (!username || !authKeyHash || !salt) {
-      return res.status(400).json({ error: 'username, authKeyHash, and salt are required' });
+    const { username, authKeyHash } = req.body;
+    if (!username || !authKeyHash) {
+      return res.status(400).json({ error: 'username and authKeyHash are required' });
     }
     if (typeof username !== 'string' || username.length < 3 || username.length > 32) {
       return res.status(400).json({ error: 'username must be 3-32 characters' });
     }
+    if (typeof authKeyHash !== 'string' || authKeyHash.length < 32) {
+      return res.status(400).json({ error: 'Invalid authKeyHash' });
+    }
 
-    const serverHash = await argon2.hash(authKeyHash, { type: argon2.argon2id });
+    const serverSalt = randomSalt();
+    const serverHash = await argon2.hash(authKeyHash + serverSalt, {
+      type: argon2.argon2id,
+      memoryCost: 65536,
+      timeCost: 3,
+      parallelism: 1,
+    });
 
     const result = await pool.query(
-      'INSERT INTO users (username, auth_hash, salt) VALUES ($1, $2, $3) RETURNING id',
-      [username, serverHash, salt]
+      'INSERT INTO users (username, auth_hash, salt) VALUES ($1, $2, $3) RETURNING id, salt',
+      [username, serverHash, serverSalt]
     );
 
     const token = generateToken(result.rows[0].id);
-    res.status(201).json({ message: 'User created', token, username });
+    setAuthCookie(res, token);
+    res.status(201).json({ message: 'User created', username, serverSalt });
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'Username already exists' });
@@ -107,40 +229,68 @@ app.post('/api/auth/register', async (req, res, next) => {
 /**
  * POST /api/auth/login
  * Body: { username, authKeyHash }
- *
- * The server verifies the authKeyHash against the stored Argon2 hash.
- * The plaintext master password and encryption key are never transmitted.
  */
-app.post('/api/auth/login', async (req, res, next) => {
+app.post('/api/auth/login', authLimiter, usernameAuthLimiter, async (req, res, next) => {
   try {
     const { username, authKeyHash } = req.body;
     if (!username || !authKeyHash) {
       return res.status(400).json({ error: 'username and authKeyHash are required' });
     }
 
-    const result = await pool.query('SELECT id, auth_hash FROM users WHERE username = $1', [username]);
+    if (await isAccountLocked(username)) {
+      return res.status(423).json({ error: 'Account temporarily locked due to failed login attempts. Try again later.' });
+    }
+
+    const result = await pool.query('SELECT id, auth_hash, salt FROM users WHERE username = $1', [username]);
     if (result.rows.length === 0) {
+      // Use consistent timing to prevent user enumeration
+      await argon2.verify('$argon2id$v=19$m=65536,t=3,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', authKeyHash);
+      await recordFailedLogin(username);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const valid = await argon2.verify(result.rows[0].auth_hash, authKeyHash);
+    const user = result.rows[0];
+    const valid = await argon2.verify(user.auth_hash, authKeyHash + user.salt);
     if (!valid) {
+      await recordFailedLogin(username);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const token = generateToken(result.rows[0].id);
-    res.json({ message: 'Authenticated', token, username });
+    await resetFailedLogin(username);
+
+    const token = generateToken(user.id);
+    setAuthCookie(res, token);
+    res.json({ message: 'Authenticated', username, serverSalt: user.salt });
   } catch (err) {
     next(err);
   }
 });
 
 /**
- * GET /api/sync
- * Authorization: Bearer <token>
- *
- * Returns the user's encrypted payload. The server cannot decrypt it.
+ * POST /api/auth/logout
  */
+app.post('/api/auth/logout', authenticate, async (req, res) => {
+  clearAuthCookie(res);
+  res.json({ message: 'Logged out' });
+});
+
+/**
+ * GET /api/auth/session
+ * Returns the current session info without exposing the token.
+ */
+app.get('/api/auth/session', authenticate, async (req, res) => {
+  const result = await pool.query(
+    'SELECT username FROM users WHERE id = $1', [req.userId]);
+  if (result.rows.length === 0) {
+    clearAuthCookie(res);
+    return res.status(401).json({ error: 'User not found' });
+  }
+  res.json({ username: result.rows[0].username });
+});
+
+
+
+// ─── Sync ─────────────────────────────────────────────────────────────────────
 app.get('/api/sync', authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
@@ -157,13 +307,6 @@ app.get('/api/sync', authenticate, async (req, res, next) => {
   }
 });
 
-/**
- * PUT /api/sync
- * Authorization: Bearer <token>
- * Body: { encryptedBlob }
- *
- * Stores an opaque encrypted blob for the authenticated user.
- */
 app.put('/api/sync', authenticate, async (req, res, next) => {
   try {
     const { encryptedBlob } = req.body;

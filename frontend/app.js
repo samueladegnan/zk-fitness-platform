@@ -8,7 +8,13 @@
  *        barbell math, confetti, sounds, plan editor, and history editing.
  */
 
-const API_BASE = (typeof window !== 'undefined' && window.location.hostname !== 'localhost') ? '/api' : 'http://localhost:3000/api';
+// API_BASE can be overridden for production by setting window.ZK_API_BASE
+// (e.g. via an inline <script> in index.html or a CI build step).
+const API_BASE =
+  (typeof window !== 'undefined' && window.ZK_API_BASE) ||
+  (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+    ? '/api'
+    : 'http://localhost:3000/api');
 
 // In-memory session state (never persists to disk unencrypted except in demo mode)
 let session = {
@@ -128,9 +134,9 @@ async function api(path, options = {}) {
   let res;
   try {
     res = await fetch(`${API_BASE}${path}`, {
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(session.token && { Authorization: `Bearer ${session.token}` }),
         ...options.headers,
       },
       ...options,
@@ -518,6 +524,55 @@ function initTheme() {
   }
 }
 
+function evaluatePasswordStrength(password) {
+  let score = 0;
+  if (password.length >= 12) score += 1;
+  if (password.length >= 16) score += 1;
+  if (/[A-Z]/.test(password)) score += 1;
+  if (/[a-z]/.test(password)) score += 1;
+  if (/[0-9]/.test(password)) score += 1;
+  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+  return Math.min(5, score);
+}
+
+function renderPasswordStrength(password) {
+  const meter = $('password-strength');
+  if (!meter) return;
+  if (!password) {
+    meter.textContent = '';
+    meter.className = 'password-strength';
+    return;
+  }
+  const score = evaluatePasswordStrength(password);
+  const labels = ['Very weak', 'Weak', 'Fair', 'Good', 'Strong', 'Excellent'];
+  meter.textContent = labels[score];
+  meter.className = `password-strength strength-${score}`;
+}
+
+async function performPasswordAuth(username, password) {
+  const salt = await deriveSalt(username);
+  const { authKey, encKey } = await deriveKeys(password, salt);
+  session = { ...session, username, encKey, salt };
+
+  if (isRegisterMode) {
+    await api('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, authKeyHash: authKey }),
+    });
+  } else {
+    await api('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, authKeyHash: authKey }),
+    });
+  }
+
+  isAuthenticated = true;
+  renderNav();
+  await loadSync();
+  showView('dashboard-view');
+  renderDashboard();
+}
+
 function initAuthUI() {
   const authForm = $('auth-form');
   const authBtn = $('auth-btn');
@@ -529,36 +584,27 @@ function initAuthUI() {
     toggleBtn.textContent = isRegisterMode ? 'Already have an account? Log in' : 'Need an account? Register';
   });
 
+  const passwordInput = $('password');
+  if (passwordInput) {
+    passwordInput.addEventListener('input', (e) => renderPasswordStrength(e.target.value));
+  }
+
   authForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     $('auth-error').textContent = '';
     const username = $('username').value.trim();
     const password = $('password').value;
-    const salt = await deriveSalt(username);
+
+    if (isRegisterMode) {
+      const score = evaluatePasswordStrength(password);
+      if (score < 3) {
+        $('auth-error').textContent = 'Password is too weak. Use at least 12 characters with mixed case, numbers, and symbols.';
+        return;
+      }
+    }
 
     try {
-      const { authKey, encKey } = await deriveKeys(password, salt);
-      session = { ...session, username, encKey, salt };
-
-      if (isRegisterMode) {
-        const res = await api('/auth/register', {
-          method: 'POST',
-          body: JSON.stringify({ username, authKeyHash: authKey, salt: arrayBufferToBase64(salt) }),
-        });
-        session.token = res.token;
-      } else {
-        const res = await api('/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({ username, authKeyHash: authKey }),
-        });
-        session.token = res.token;
-      }
-
-      isAuthenticated = true;
-      renderNav();
-      await loadSync();
-      showView('dashboard-view');
-      renderDashboard();
+      await performPasswordAuth(username, password);
     } catch (err) {
       $('auth-error').textContent = err.message;
     }
@@ -645,7 +691,12 @@ function renderNav() {
   $('nav-logout').addEventListener('click', logout);
 }
 
-function logout() {
+async function logout() {
+  try {
+    await api('/auth/logout', { method: 'POST' });
+  } catch (err) {
+    console.error('Logout API call failed:', err);
+  }
   session = {
     username: null,
     token: null,

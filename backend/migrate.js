@@ -28,6 +28,14 @@ CREATE TABLE IF NOT EXISTS sync_data (
   encrypted_blob TEXT NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS failed_login_attempts (
+  username VARCHAR(32) PRIMARY KEY,
+  attempt_count INTEGER DEFAULT 1 NOT NULL,
+  last_attempt TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  locked_until TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 `;
 
 async function main() {
