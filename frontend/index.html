@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZK Fitness — Zero-Knowledge Workout Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>" />
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="exercises.js"></script>
+  <script defer src="vendor/argon2.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>ZK Fitness</span>
+      </div>
+      <div id="active-workout-banner" class="hidden">
+        <span class="active-label">Active Workout</span>
+        <span id="active-workout-timer">0:00</span>
+        <button id="resume-workout-btn" class="small">Resume</button>
+      </div>
+      <nav class="app-nav" id="nav"></nav>
+    </header>
+
+    <main id="main">
+      <!-- Auth view -->
+      <section id="auth-view" class="view">
+        <div class="auth-card">
+          <h1>Privacy-First Strength Training</h1>
+          <p class="subtitle">Your workout data is encrypted in your browser. We cannot read it.</p>
+          <form id="auth-form">
+            <label for="username">Username</label>
+            <input id="username" name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" />
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" required minlength="8" autocomplete="current-password" />
+            <div class="form-actions">
+              <button type="submit" id="auth-btn">Register</button>
+              <button type="button" id="toggle-mode" class="link">Already have an account? Log in</button>
+            </div>
+            <p id="auth-error" class="error" role="status"></p>
+          </form>
+        </div>
+      </section>
+
+      <!-- Dashboard view -->
+      <section id="dashboard-view" class="view hidden">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-label">Level</span>
+            <span class="stat-value" id="stat-level">1</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Total XP</span>
+            <span class="stat-value" id="stat-xp">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Total Tonnage</span>
+            <span class="stat-value" id="stat-tonnage">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Workouts</span>
+            <span class="stat-value" id="stat-workouts">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Streak</span>
+            <span class="stat-value" id="stat-streak">0</span>
+          </div>
+        </div>
+
+        <div class="panel xp-panel">
+          <div class="xp-info">
+            <span id="xp-progress-text">0/100 XP to next level</span>
+            <div class="xp-bar"><div id="xp-progress"></div></div>
+          </div>
+          <button id="units-toggle" class="secondary small" type="button">Units: kg</button>
+        </div>
+
+        <div class="panel">
+          <h2>Badges</h2>
+          <div id="badges-list" class="badges-list"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Recent Personal Records</h2>
+          <div id="pr-list" class="pr-list"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Recent Workouts</h2>
+          <table class="log-table" id="history-table">
+            <thead>
+              <tr><th>Date</th><th>Plan</th><th>Exercises</th><th>Sets</th><th>XP</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <p id="sync-status" class="status" role="status"></p>
+        </div>
+      </section>
+
+      <!-- Plans view -->
+      <section id="plans-view" class="view hidden">
+        <div class="section-header">
+          <h2>Workout Plans</h2>
+        </div>
+        <div id="plans-list" class="plans-grid"></div>
+      </section>
+
+      <!-- Exercises view -->
+      <section id="exercises-view" class="view hidden">
+        <h2>Exercise Database</h2>
+        <p class="muted">Browse exercises or add custom ones. When you have an active workout, you can add exercises directly from here.</p>
+        <div id="exercises-list" class="exercises-list"></div>
+      </section>
+
+      <!-- Workout view -->
+      <section id="workout-view" class="view hidden">
+        <!-- Rendered dynamically by app.js -->
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      Zero-Knowledge Gamified Fitness Platform — Built by Samuel Degnan
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: zk-fitness-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-fitness}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-fitness}
+      POSTGRES_DB: ${DB_NAME:-fitness_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-fitness} -d ${DB_NAME:-fitness_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zk-fitness-api
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:8080}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-fitness}
+      DB_PASSWORD: ${DB_PASSWORD:-fitness}
+      DB_NAME: ${DB_NAME:-fitness_db}
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "node migrate.js && node server.js"
+
+volumes:
+  pgdata:

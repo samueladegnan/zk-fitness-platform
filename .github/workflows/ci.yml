@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fitness
+          POSTGRES_PASSWORD: fitness
+          POSTGRES_DB: fitness_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Lint
+        working-directory: ./backend
+        run: npm run lint
+
+      - name: Run migrations
+        working-directory: ./backend
+        env:
+          DB_HOST: localhost
+          DB_USER: fitness
+          DB_PASSWORD: fitness
+          DB_NAME: fitness_db
+          JWT_SECRET: ci-test-secret
+        run: npm run migrate
+
+      - name: Run tests
+        working-directory: ./backend
+        env:
+          DB_HOST: localhost
+          DB_USER: fitness
+          DB_PASSWORD: fitness
+          DB_NAME: fitness_db
+          JWT_SECRET: ci-test-secret
+        run: npm test
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t zk-fitness-api ./backend

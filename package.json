@@ -1,0 +1,30 @@
+{
+  "name": "zk-gamified-fitness-platform",
+  "version": "1.0.0",
+  "description": "Zero-Knowledge Gamified Fitness Platform — privacy-first, full-stack strength training.",
+  "scripts": {
+    "start": "cd backend && npm start",
+    "dev": "cd backend && npm run dev",
+    "dev:infra": "docker compose up -d db",
+    "dev:api": "cd backend && npm run dev",
+    "dev:client": "npx serve frontend -l 3001",
+    "dev:stop": "npx kill-port 3000 3001 || true",
+    "copy-argon2": "cp node_modules/argon2-browser/dist/argon2-bundled.min.js frontend/vendor/argon2.min.js",
+    "migrate": "cd backend && npm run migrate",
+    "install:backend": "cd backend && npm install",
+    "test": "cd backend && npm test"
+  },
+  "keywords": [
+    "zero-knowledge",
+    "privacy",
+    "fitness",
+    "encryption",
+    "full-stack"
+  ],
+  "author": "Samuel Degnan",
+  "license": "MIT",
+  "devDependencies": {
+    "argon2-browser": "^1.18.0",
+    "kill-port": "^2.0.1"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "name": "zk-gamified-fitness-backend",
+  "version": "1.0.0",
+  "description": "Zero-knowledge storage API for the gamified fitness platform.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test test/*.test.js",
+    "lint": "eslint .",
+    "migrate": "node migrate.js"
+  },
+  "keywords": [
+    "zero-knowledge",
+    "privacy",
+    "fitness",
+    "encryption",
+    "express"
+  ],
+  "author": "Samuel Degnan",
+  "license": "MIT",
+  "dependencies": {
+    "argon2": "^0.41.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.14.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.22.0",
+    "eslint": "^9.22.0",
+    "globals": "^15.0.0",
+    "supertest": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
