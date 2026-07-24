@@ -410,8 +410,8 @@ function renderSetFields(exercise, set, exIndex, setIndex, isCardio) {
   }
   return `
     <div class="set-field">
-      <label>Weight</label>
-      <input type="number" placeholder="kg" value="${set.weight}" data-idx="${exIndex}" data-set="${setIndex}" data-field="weight" class="weight-input" data-equipment="${equipment}" />
+      <label>Weight (${session.data.preferences.units || 'kg'})</label>
+      <input type="number" placeholder="${session.data.preferences.units || 'kg'}" value="${set.weight}" data-idx="${exIndex}" data-set="${setIndex}" data-field="weight" class="weight-input" data-equipment="${equipment}" />
     </div>
     <div class="set-field">
       <label>Reps</label>
@@ -563,6 +563,13 @@ function showToast(message, type = 'info') {
   toast.className = type === 'error' ? 'toast toast-error' : 'toast toast-info';
   toast.classList.add('visible');
   setTimeout(() => toast.classList.remove('visible'), 4000);
+}
+
+function toggleUnits() {
+  const current = session.data.preferences.units || 'kg';
+  session.data.preferences.units = current === 'kg' ? 'lbs' : 'kg';
+  syncDataImmediate();
+  return session.data.preferences.units;
 }
 
 // ─── Custom Modal (replaces alert/confirm/prompt) ───────────────────────────
@@ -910,8 +917,7 @@ function renderDashboard() {
   if (unitsBtn) {
     unitsBtn.textContent = `Units: ${units}`;
     unitsBtn.onclick = () => {
-      session.data.preferences.units = units === 'kg' ? 'lbs' : 'kg';
-      syncDataImmediate();
+      toggleUnits();
       renderDashboard();
     };
   }
@@ -1337,7 +1343,10 @@ function renderActiveWorkout(pastWorkoutId) {
     <div class="workout-header">
       <div>
         <h2>${workout.name}${isPastEdit ? ' (History Edit)' : ''}</h2>
-        ${isPastEdit ? `<div class="muted">${new Date(workout.date).toLocaleString()}</div>` : `<div class="timer" id="workout-timer">${formatDuration(workout.startTime)}</div>`}
+        <div class="workout-meta">
+          ${isPastEdit ? `<div class="muted">${new Date(workout.date).toLocaleString()}</div>` : `<div class="timer" id="workout-timer">${formatDuration(workout.startTime)}</div>`}
+          <button class="secondary units-toggle-workout">Units: ${session.data.preferences.units || 'kg'}</button>
+        </div>
       </div>
       <div class="rest-big" id="rest-big"></div>
     </div>
@@ -1519,6 +1528,14 @@ function renderActiveWorkout(pastWorkoutId) {
       finishWorkout();
     }
   });
+
+  const unitsToggleBtn = view.querySelector('.units-toggle-workout');
+  if (unitsToggleBtn) {
+    unitsToggleBtn.addEventListener('click', () => {
+      toggleUnits();
+      renderActiveWorkout(pastWorkoutId);
+    });
+  }
 
   const cancelBtn = isPastEdit ? $('cancel-edit') : $('cancel-workout');
   if (cancelBtn) {
