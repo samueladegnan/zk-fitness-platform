@@ -1,6 +1,6 @@
 # Zero-Knowledge Gamified Fitness Platform
 
-🌐 **Live Portfolio:** [View the live portfolio &rarr;](https://samueladegnan.github.io/zk-gamified-fitness-platform/)
+🌐 **Live Portfolio:** [View the live portfolio &rarr;](https://samueladegnan.github.io/zk-fitness-platform/)
 
 A privacy-first, full-stack strength training platform built around a **Zero-Knowledge Architecture**. All exercise logs and progress metrics are encrypted client-side with AES-256-GCM before they ever touch the cloud, so your personal health data remains inaccessible to the server operator while still enabling cross-device synchronization and gamified analytics.
 
@@ -86,8 +86,8 @@ This platform flips the trust model. The server only stores **opaque, encrypted 
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/samueladegnan/zk-gamified-fitness-platform.git
-cd zk-gamified-fitness-platform
+git clone https://github.com/samueladegnan/zk-fitness-platform.git
+cd zk-fitness-platform
 npm run install:backend   # install backend dependencies
 ```
 

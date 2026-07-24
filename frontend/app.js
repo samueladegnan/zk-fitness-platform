@@ -566,7 +566,27 @@ function initAuthUI() {
 
   const demoBtn = $('demo-mode-btn');
   if (demoBtn) {
-    demoBtn.addEventListener('click', startDemoMode);
+    demoBtn.addEventListener('click', () => {
+      const modal = $('demo-modal');
+      if (modal) modal.classList.remove('hidden');
+    });
+  }
+
+  const confirmDemoBtn = $('start-demo-confirm-btn');
+  if (confirmDemoBtn) {
+    confirmDemoBtn.addEventListener('click', () => {
+      const modal = $('demo-modal');
+      if (modal) modal.classList.add('hidden');
+      startDemoMode();
+    });
+  }
+
+  const cancelDemoBtn = $('cancel-demo-btn');
+  if (cancelDemoBtn) {
+    cancelDemoBtn.addEventListener('click', () => {
+      const modal = $('demo-modal');
+      if (modal) modal.classList.add('hidden');
+    });
   }
 }
 

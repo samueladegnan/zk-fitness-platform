@@ -158,6 +158,24 @@
 
     <canvas id="confetti-canvas" aria-hidden="true"></canvas>
 
+    <!-- Demo Security Modal -->
+    <div id="demo-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="demo-modal-title">
+      <div class="modal-content">
+        <h2 id="demo-modal-title">Zero-Knowledge Security Demo</h2>
+        <p>Before you begin, here is how this app protects your data:</p>
+        <ul>
+          <li><strong>Zero-Knowledge Architecture:</strong> We never know your password. Keys are derived client-side using Argon2id.</li>
+          <li><strong>End-to-End Encryption:</strong> Every workout is encrypted in your browser with AES-256-GCM.</li>
+          <li><strong>Server Cannot Read Data:</strong> The backend only stores random-looking ciphertext blobs. It has no access to plaintext.</li>
+          <li><strong>Demo Mode is Local:</strong> No server is used. Your data is encrypted and stored only in your browser's local storage.</li>
+        </ul>
+        <div class="modal-actions">
+          <button id="start-demo-confirm-btn" type="button">Start Demo</button>
+          <button id="cancel-demo-btn" class="secondary" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <footer class="app-footer">
       Zero-Knowledge Gamified Fitness Platform — Built by Samuel Degnan
     </footer>
