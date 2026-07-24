@@ -206,7 +206,8 @@ function xpForSet(set) {
 
 function xpForWorkout(sets) {
   const base = sets.reduce((sum, s) => sum + (s.xp || xpForSet(s)), 0);
-  return base + 50;
+  // Only award the completion bonus if the workout has at least one valid set.
+  return sets.length > 0 ? base + 50 : 0;
 }
 
 function totalTonnage(sets) {
@@ -533,11 +534,7 @@ function openAppModal({ title = 'Confirm', message, confirmText = 'OK', cancelTe
     cancelBtn.textContent = cancelText;
     input.value = defaultValue;
 
-    if (hideCancel) {
-      cancelBtn.classList.add('hidden');
-    } else {
-      cancelBtn.classList.remove('hidden');
-    }
+    cancelBtn.classList.remove('hidden');
 
     if (prompt) {
       inputWrapper.classList.remove('hidden');
@@ -1726,6 +1723,10 @@ async function finishWorkout() {
   }
 
   workout.exercises = workout.exercises.filter((ex) => ex.sets.length > 0);
+  if (workout.exercises.length === 0) {
+    showToast('Add at least one completed set before finishing the workout.', 'error');
+    return;
+  }
   workout.setsCount = workout.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
   workout.xp = xpForWorkout(workout.exercises.flatMap((ex) => ex.sets));
 
@@ -1761,10 +1762,19 @@ function savePastWorkoutChanges(workout) {
       }));
   });
   workout.exercises = workout.exercises.filter((ex) => ex.sets.length > 0);
+  const idx = session.data.workouts.findIndex((w) => w.id === workout.id);
+  if (workout.exercises.length === 0) {
+    if (idx >= 0) {
+      session.data.workouts.splice(idx, 1);
+      syncDataImmediate();
+    }
+    showView('history-view');
+    renderHistory();
+    return;
+  }
   workout.setsCount = workout.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
   workout.xp = xpForWorkout(workout.exercises.flatMap((ex) => ex.sets));
 
-  const idx = session.data.workouts.findIndex((w) => w.id === workout.id);
   if (idx >= 0) {
     session.data.workouts[idx] = workout;
   }

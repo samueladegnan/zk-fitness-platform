@@ -1,7 +1,7 @@
 {
-  "name": "zk-gamified-fitness-backend",
+  "name": "zk-fitness-backend",
   "version": "1.0.0",
-  "description": "Zero-knowledge storage API for the gamified fitness platform.",
+  "description": "Zero-knowledge storage API for the fitness platform.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

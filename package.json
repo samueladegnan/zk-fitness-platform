@@ -1,7 +1,7 @@
 {
   "name": "zk-fitness-platform",
   "version": "1.0.0",
-  "description": "Zero-Knowledge Gamified Fitness Platform — privacy-first, full-stack strength training.",
+  "description": "Zero-Knowledge Fitness Platform — privacy-first, full-stack strength training.",
   "scripts": {
     "start": "cd backend && npm start",
     "dev": "cd backend && npm run dev",

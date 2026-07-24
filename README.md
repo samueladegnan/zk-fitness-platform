@@ -1,4 +1,4 @@
-# Zero-Knowledge Gamified Fitness Platform
+# Zero-Knowledge Fitness Platform
 
 🌐 **Live Portfolio:** [View the live portfolio &rarr;](https://samueladegnan.github.io/zk-fitness-platform/)
 
