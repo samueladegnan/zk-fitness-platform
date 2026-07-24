@@ -1,5 +1,7 @@
 # Zero-Knowledge Gamified Fitness Platform
 
+🌐 **Live Portfolio:** [View the live portfolio &rarr;](https://samueladegnan.github.io/zk-gamified-fitness-platform/)
+
 A privacy-first, full-stack strength training platform built around a **Zero-Knowledge Architecture**. All exercise logs and progress metrics are encrypted client-side with AES-256-GCM before they ever touch the cloud, so your personal health data remains inaccessible to the server operator while still enabling cross-device synchronization and gamified analytics.
 
 ---

@@ -30,7 +30,8 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir -p site
-          cp index.html site/
+          cp index.html demo.html architecture.html site/
+          cp -r assets frontend site/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
