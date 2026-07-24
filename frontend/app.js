@@ -158,7 +158,7 @@ async function api(path, options = {}) {
       ...options,
     });
   } catch (networkErr) {
-    throw new Error('Could not reach the server. Is the backend running on http://localhost:3000?');
+    throw new Error('Unable to reach the backend. Please check your connection and try again. If the backend has just started, it may need 30–60 seconds to become available.');
   }
 
   let body = {};
