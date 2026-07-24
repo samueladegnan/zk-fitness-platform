@@ -1111,6 +1111,18 @@ button.small { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
   margin: 1rem 0 0.5rem;
 }
 
+#app-modal-input-wrapper.hidden {
+  display: none;
+}
+
+#app-modal-input-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
 #app-modal-input {
   width: 100%;
   padding: 0.65rem 0.85rem;

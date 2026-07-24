@@ -518,7 +518,7 @@ function showToast(message, type = 'info') {
 
 // ─── Custom Modal (replaces alert/confirm/prompt) ───────────────────────────
 
-function openAppModal({ title = 'Confirm', message, confirmText = 'OK', cancelText = 'Cancel', prompt = false, defaultValue = '' }) {
+function openAppModal({ title = 'Confirm', message, confirmText = 'OK', cancelText = 'Cancel', prompt = false, defaultValue = '', promptLabel = '' }) {
   return new Promise((resolve) => {
     const modal = $('app-modal');
     const titleEl = $('app-modal-title');
@@ -526,6 +526,7 @@ function openAppModal({ title = 'Confirm', message, confirmText = 'OK', cancelTe
     const confirmBtn = $('app-modal-confirm');
     const cancelBtn = $('app-modal-cancel');
     const inputWrapper = $('app-modal-input-wrapper');
+    const inputLabel = $('app-modal-input-label');
     const input = $('app-modal-input');
 
     titleEl.textContent = title;
@@ -533,6 +534,18 @@ function openAppModal({ title = 'Confirm', message, confirmText = 'OK', cancelTe
     confirmBtn.textContent = confirmText;
     cancelBtn.textContent = cancelText;
     input.value = defaultValue;
+
+    if (inputLabel) {
+      if (prompt && promptLabel) {
+        inputLabel.textContent = promptLabel;
+        inputLabel.style.display = 'block';
+        input.placeholder = promptLabel;
+      } else {
+        inputLabel.textContent = '';
+        inputLabel.style.display = 'none';
+        input.placeholder = '';
+      }
+    }
 
     cancelBtn.classList.remove('hidden');
 
@@ -1397,6 +1410,7 @@ function renderActiveWorkout(pastWorkoutId) {
           title: 'Warmup Weight',
           message: 'Enter your target working weight to generate warmup sets:',
           prompt: true,
+          promptLabel: 'Target working weight',
           confirmText: 'Generate',
           cancelText: 'Cancel',
         });
