@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architecture | ZK Fitness</title>
+  <meta name="description" content="Architecture of the ZK Fitness zero-knowledge workout tracking platform." />
+  <link rel="stylesheet" href="./assets/css/style.css" />
+</head>
+<body>
+  <header class="page-header">
+    <nav class="site-nav" aria-label="Primary">
+      <a class="site-nav-brand" href="./index.html">ZK Fitness</a>
+      <ul class="site-nav-links">
+        <li><a href="./index.html">Overview</a></li>
+        <li><a href="./demo.html">Live Demo</a></li>
+        <li><a class="active" href="./architecture.html" aria-current="page">Architecture</a></li>
+        <li>
+          <a class="site-nav-github" href="https://github.com/samueladegnan/zk-gamified-fitness-platform" aria-label="View source on GitHub">GitHub</a>
+        </li>
+      </ul>
+    </nav>
+
+    <h1 class="project-name">ZK Fitness</h1>
+    <p class="project-tagline">Privacy-first fitness tracking with zero-knowledge encryption.</p>
+    <a class="btn" href="./frontend/index.html">Launch Live Demo</a>
+  </header>
+
+  <main class="main-content">
+    <h2>System Architecture</h2>
+    <p>The system is split into two primary tiers:</p>
+    <ul>
+      <li><strong>Client (Frontend):</strong> HTML5/Vanilla JS app that handles cryptographic operations, UI/UX, and local state management.</li>
+      <li><strong>Server (Backend):</strong> Node.js/Express API backed by PostgreSQL, containerized with Docker for easy deployment.</li>
+    </ul>
+
+    <h2>Zero-Knowledge Flow</h2>
+    <ol>
+      <li>The user enters a password in the browser.</li>
+      <li>Argon2id derives both an authentication key and an encryption key from the password.</li>
+      <li>The client encrypts workout data with AES-256-GCM before sending it to the server.</li>
+      <li>The server stores the encrypted blob in PostgreSQL.</li>
+      <li>On retrieval, the client decrypts the blob locally with the user’s key.</li>
+    </ol>
+
+    <h2>Technology Stack</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Technology</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Frontend</td>
+          <td>HTML5, Vanilla JS, CSS</td>
+          <td>UI and local state</td>
+        </tr>
+        <tr>
+          <td>Cryptography</td>
+          <td>Web Crypto API, Argon2id</td>
+          <td>Key derivation &amp; AES-256-GCM encryption</td>
+        </tr>
+        <tr>
+          <td>Backend</td>
+          <td>Node.js, Express</td>
+          <td>RESTful API endpoints</td>
+        </tr>
+        <tr>
+          <td>Database</td>
+          <td>PostgreSQL</td>
+          <td>Persistent storage for encrypted blobs</td>
+        </tr>
+        <tr>
+          <td>DevOps</td>
+          <td>Docker, Docker Compose</td>
+          <td>Containerization and orchestration</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Project Links</h2>
+    <ul>
+      <li><a href="https://github.com/samueladegnan/zk-gamified-fitness-platform">Source Code on GitHub</a></li>
+      <li><a href="./frontend/index.html">Live Web App</a></li>
+      <li><a href="./demo.html">Live Demo &amp; Setup</a></li>
+    </ul>
+  </main>
+
+  <footer class="site-footer">
+    <span class="site-footer-credits">Built by <a href="https://github.com/samueladegnan">Samuel Degnan</a>.</span>
+  </footer>
+</body>
+</html>

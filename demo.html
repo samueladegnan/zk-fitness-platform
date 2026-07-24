@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Demo | ZK Fitness</title>
+  <meta name="description" content="Try the ZK Fitness zero-knowledge workout tracker in your browser or run it locally." />
+  <link rel="stylesheet" href="./assets/css/style.css" />
+</head>
+<body>
+  <header class="page-header">
+    <nav class="site-nav" aria-label="Primary">
+      <a class="site-nav-brand" href="./index.html">ZK Fitness</a>
+      <ul class="site-nav-links">
+        <li><a href="./index.html">Overview</a></li>
+        <li><a class="active" href="./demo.html" aria-current="page">Live Demo</a></li>
+        <li><a href="./architecture.html">Architecture</a></li>
+        <li>
+          <a class="site-nav-github" href="https://github.com/samueladegnan/zk-gamified-fitness-platform" aria-label="View source on GitHub">GitHub</a>
+        </li>
+      </ul>
+    </nav>
+
+    <h1 class="project-name">ZK Fitness</h1>
+    <p class="project-tagline">Privacy-first fitness tracking with zero-knowledge encryption.</p>
+    <a class="btn" href="./frontend/index.html">Launch Live Demo</a>
+  </header>
+
+  <main class="main-content">
+    <h2>Live Demo</h2>
+    <p>Launch the live demo above to explore the app in your browser with no account required. Data is stored locally in your browser and never reaches a server in demo mode.</p>
+
+    <h2>Run It Locally</h2>
+    <p>To run the project manually on your own machine, use the following commands:</p>
+    <pre><code># 1. Clone the repository
+git clone https://github.com/samueladegnan/zk-gamified-fitness-platform.git
+cd zk-gamified-fitness-platform
+
+# 2. Start the backend services (Node.js &amp; PostgreSQL)
+docker-compose up -d
+
+# 3. Serve the frontend
+cd frontend
+npx serve .</code></pre>
+
+    <h2>Project Links</h2>
+    <ul>
+      <li><a href="https://github.com/samueladegnan/zk-gamified-fitness-platform">Source Code on GitHub</a></li>
+      <li><a href="./frontend/index.html">Live Web App</a></li>
+      <li><a href="./architecture.html">Architecture Overview</a></li>
+    </ul>
+
+    <h2>What to Try</h2>
+    <ul>
+      <li>Click <strong>Try Demo Mode</strong> on the login screen to skip registration.</li>
+      <li>Start an empty workout, add strength and cardio exercises, and log a few sets.</li>
+      <li>Finish the workout and watch the XP, level, and badge updates.</li>
+      <li>Browse the Plans tab to create or edit a workout template.</li>
+      <li>Open the History tab to view and edit past workouts.</li>
+    </ul>
+  </main>
+
+  <footer class="site-footer">
+    <span class="site-footer-credits">Built by <a href="https://github.com/samueladegnan">Samuel Degnan</a>.</span>
+  </footer>
+</body>
+</html>

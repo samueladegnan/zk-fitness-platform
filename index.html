@@ -5,91 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ZK Fitness | Zero-Knowledge Gamified Fitness Platform</title>
   <meta name="description" content="A privacy-first, full-stack strength training and cardio tracking platform using client-side encryption and a zero-knowledge cloud architecture." />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>" />
-  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="./assets/css/style.css" />
 </head>
 <body>
   <header class="page-header">
     <nav class="site-nav" aria-label="Primary">
-      <div class="site-nav__container">
-        <a class="site-nav__brand" href="#">🛡️ ZK Fitness</a>
-        <ul class="site-nav__links">
-          <li><a href="#showcase">Demo</a></li>
-          <li><a href="#features">Features</a></li>
-          <li><a href="#tech">Tech Stack</a></li>
-          <li><a href="frontend/index.html">Try Fullscreen</a></li>
-        </ul>
-      </div>
+      <a class="site-nav-brand" href="./index.html">ZK Fitness</a>
+      <ul class="site-nav-links">
+        <li><a class="active" href="./index.html" aria-current="page">Overview</a></li>
+        <li><a href="./demo.html">Live Demo</a></li>
+        <li><a href="./architecture.html">Architecture</a></li>
+        <li>
+          <a class="site-nav-github" href="https://github.com/samueladegnan/zk-gamified-fitness-platform" aria-label="View source on GitHub">GitHub</a>
+        </li>
+      </ul>
     </nav>
 
     <h1 class="project-name">ZK Fitness</h1>
     <p class="project-tagline">Privacy-first fitness tracking with zero-knowledge encryption.</p>
-    <a class="btn" href="frontend/index.html">Launch Live Demo</a>
-    <a class="btn" href="https://github.com/samueladegnan/zk-gamified-fitness-platform">View on GitHub</a>
+    <a class="btn" href="./frontend/index.html">Launch Live Demo</a>
   </header>
 
   <main class="main-content">
-    <section id="showcase">
-      <h2>Try It Right Here</h2>
-      <p>Click <strong>Try Demo Mode</strong> inside the app below to explore workouts, plans, history, and gamification without creating an account. Data stays local to your browser.</p>
-      <div class="app-frame">
-        <iframe src="frontend/index.html" title="ZK Fitness App"></iframe>
-        <div class="app-frame-notice">Live embedded demo — data is stored locally in your browser.</div>
-      </div>
-    </section>
+    <h2>What It Is</h2>
+    <p><strong>ZK Fitness</strong> is a privacy-first, full-stack strength training and cardio tracking platform. It uses client-side encryption and a zero-knowledge cloud architecture to ensure your workout data remains entirely your own.</p>
 
-    <section id="features">
-      <h2>Everything You Need</h2>
-      <div class="feature-grid">
-        <div class="feature-card">
-          <div class="feature-icon">🔐</div>
-          <h3>Zero-Knowledge Architecture</h3>
-          <p>All workout data is encrypted client-side with AES-256-GCM. The server only sees an opaque blob it cannot decrypt.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🏋️</div>
-          <h3>Strength & Cardio</h3>
-          <p>Log weight and reps for lifting, or distance, duration, heart rate, and calories for running, cycling, swimming, and more.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">📊</div>
-          <h3>Gamified Progress</h3>
-          <p>Earn XP, level up, unlock badges, track streaks, and celebrate personal records with confetti and sound effects.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">⏱️</div>
-          <h3>Smart Rest Timer</h3>
-          <p>Configurable rest timers with +/-30s quick controls, audio alerts, and warmup set generation.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">📝</div>
-          <h3>Plans & History</h3>
-          <p>Create and edit workout templates. View, edit, and delete your full workout history anytime.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🌙</div>
-          <h3>Dark Mode</h3>
-          <p>Toggle between light and dark themes for comfortable tracking in any environment.</p>
-        </div>
-      </div>
-    </section>
+    <h2>How It Works</h2>
+    <p>Using the Web Crypto API, all data is encrypted directly in your browser with AES-256-GCM before it touches the network. The backend server only stores opaque blobs it cannot decrypt. Key derivation is handled by Argon2id, providing strong protection against brute-force attacks.</p>
 
-    <section id="tech">
-      <h2>Built With Modern Tech</h2>
-      <p>A lightweight, privacy-focused stack that runs anywhere.</p>
-      <div class="tech-grid">
-        <div class="tech-card">HTML5 & Vanilla JS</div>
-        <div class="tech-card">Web Crypto API</div>
-        <div class="tech-card">Argon2id</div>
-        <div class="tech-card">Node.js & Express</div>
-        <div class="tech-card">PostgreSQL</div>
-        <div class="tech-card">Docker</div>
-      </div>
-    </section>
+    <h2>Key Features</h2>
+    <ul>
+      <li><strong>Zero-Knowledge Architecture:</strong> End-to-end client-side encryption means the server has zero visibility into your personal health data.</li>
+      <li><strong>Strength &amp; Cardio Tracking:</strong> Log weight and reps for lifting, or distance, duration, heart rate, and calories for running, cycling, swimming, and more.</li>
+      <li><strong>Gamified Progress:</strong> Earn XP, level up, unlock badges, and track active streaks.</li>
+      <li><strong>Smart Rest Timer:</strong> Configurable rest timers with +/- 30s quick controls, audio alerts, and warmup set generation.</li>
+      <li><strong>Plans &amp; History:</strong> Create and edit workout templates, then view, edit, or delete your full workout history.</li>
+      <li><strong>Dark Mode:</strong> Toggle between light and dark themes for comfortable tracking in any environment.</li>
+    </ul>
 
-    <footer class="site-footer">
-      <p>Built by <a href="https://github.com/samueladegnan">Samuel Degnan</a> as a portfolio project demonstrating full-stack engineering, end-to-end cryptography, and privacy-preserving cloud architecture.</p>
-    </footer>
+    <h2>About the Author</h2>
+    <p>Built by <a href="https://github.com/samueladegnan">Samuel Degnan</a> as a portfolio project demonstrating full-stack engineering, end-to-end cryptography, and privacy-preserving cloud architecture.</p>
   </main>
+
+  <footer class="site-footer">
+    <span class="site-footer-credits">Built by <a href="https://github.com/samueladegnan">Samuel Degnan</a>.</span>
+  </footer>
 </body>
 </html>
