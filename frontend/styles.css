@@ -1042,11 +1042,14 @@ button.small { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
   top: calc(100% + 6px);
   left: 0;
   z-index: 20;
-  background: var(--text);
-  color: #fff;
+  background: var(--card);
+  color: var(--text);
   padding: 0.5rem 0.75rem;
   border-radius: var(--radius);
-  font-size: 0.8rem;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  font-size: 0.85rem;
+  font-weight: 500;
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;

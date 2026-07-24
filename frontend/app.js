@@ -1103,7 +1103,7 @@ function renderExercises() {
     .join('')}</div>`;
   const searchHtml = `
     <div class="search-row">
-      <input id="exercise-search" type="search" placeholder="Search exercises (e.g. 'bench', 'bnech', 'cardio')" aria-label="Search exercises" />
+      <input id="exercise-search" type="search" placeholder="Search exercises (e.g. 'bench', 'treadmill', 'cardio')" aria-label="Search exercises" />
     </div>
   `;
 
