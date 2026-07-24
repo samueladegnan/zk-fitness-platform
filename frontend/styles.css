@@ -798,6 +798,35 @@ button.small { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
   border-top: 1px solid var(--border);
 }
 
+/* Back to portfolio link */
+.back-to-portfolio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.back-to-portfolio:hover {
+  background: var(--border);
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  .back-to-portfolio {
+    font-size: 0.8rem;
+    padding: 0.3rem 0.5rem;
+  }
+}
+
 /* Plan editor */
 .plan-editor .panel { margin-bottom: 1rem; }
 
