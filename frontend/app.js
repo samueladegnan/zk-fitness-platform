@@ -1,5 +1,5 @@
 /**
- * ZK Fitness — Client Application
+ * ZK Fitness - Client Application
  *
  * - Derives auth and encryption keys from the password using Argon2id + HKDF.
  * - Encrypts/decrypts workout data with Web Crypto API (AES-256-GCM).
@@ -781,7 +781,7 @@ async function startDemoMode() {
     await loadSync();
     showView('dashboard-view');
     renderDashboard();
-    showToast('Demo mode active — your data is stored locally', 'info');
+    showToast('Demo mode active - your data is stored locally', 'info');
   } catch (err) {
     $('auth-error').textContent = err.message;
   }
@@ -935,7 +935,7 @@ function renderPlans() {
           <span class="plan-meta">${plan.exercises.length} exercises</span>
         </div>
         <ul class="plan-exercises">
-          ${plan.exercises.map((e) => `<li>${getExercise(e.exerciseId).name} — ${e.targetSets}x${e.targetReps}</li>`).join('')}
+          ${plan.exercises.map((e) => `<li>${getExercise(e.exerciseId).name} - ${e.targetSets}x${e.targetReps}</li>`).join('')}
         </ul>
         <div class="plan-actions">
           <button class="btn-start" data-id="${plan.id}">Start Workout</button>

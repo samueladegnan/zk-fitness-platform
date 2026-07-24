@@ -1,6 +1,6 @@
 /**
  * Built-in exercise catalog for ZK Fitness.
- * Client-side only — the zero-knowledge server never sees this data.
+ * Client-side only - the zero-knowledge server never sees this data.
  */
 
 const EXERCISE_CATALOG = [

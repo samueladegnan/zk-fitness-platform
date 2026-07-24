@@ -1,5 +1,5 @@
 /**
- * Zero-Knowledge Fitness Platform — Backend API
+ * Zero-Knowledge Fitness Platform - Backend API
  *
  * The server provides authentication and encrypted sync only.
  * It NEVER has access to the user's master password, encryption key,

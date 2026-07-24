@@ -1,5 +1,5 @@
 /**
- * ZK Fitness — Runtime frontend configuration.
+ * ZK Fitness - Runtime frontend configuration.
  *
  * This file is intentionally committed with a placeholder so the app works
  * out-of-the-box in local development. For GitHub Pages deployments, the

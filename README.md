@@ -28,7 +28,7 @@ This platform flips the trust model. The server only stores **opaque, encrypted 
 - **Custom Exercises**: add your own exercises on the fly with category and equipment tags.
 - **Workout Plans**: reusable plan templates for full-body, upper/lower, and custom routines with a plan editor.
 - **Active Workout Mode**: set logging with weight/reps, auto-calculated warmup sets, live workout timer, and rest timers between sets.
-- **Persistent Active Workout**: leave the workout page and come back later—the timer keeps running and progress is synced.
+- **Persistent Active Workout**: leave the workout page and come back later-the timer keeps running and progress is synced.
 - **Mid-Workout Editing**: add exercises during a workout, delete sets, and adjust reps/weight at any time.
 - **Rest Timer with +/-30s Controls**: quickly adjust rest time during a workout with a tap.
 - **Warmup Set Generator**: generate warmup sets based on your target working weight.
@@ -201,7 +201,7 @@ For local development, leave `ZK_API_BASE` unset. The app falls back to `http://
 
 This step explains what the `CLIENT_ORIGIN` environment variable from Step 2 does. You do **not** set it in a different place.
 
-The backend uses `CLIENT_ORIGIN` to validate incoming requests and to decide how to set cookies. It must be the GitHub Pages origin — the host only, not the full repository path.
+The backend uses `CLIENT_ORIGIN` to validate incoming requests and to decide how to set cookies. It must be the GitHub Pages origin - the host only, not the full repository path.
 
 | Setting | Example value |
 |---|---|
