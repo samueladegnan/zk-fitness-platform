@@ -101,7 +101,7 @@ function cleanupChallenges() {
   }
 }
 
-setInterval(cleanupChallenges, 60_000);
+setInterval(cleanupChallenges, 60_000).unref();
 
 function hashForPoW(authKeyHash, nonce, solution) {
   return createHash('sha256')
@@ -219,7 +219,7 @@ function cleanupLoginNonces() {
   }
 }
 
-setInterval(cleanupLoginNonces, 60_000);
+setInterval(cleanupLoginNonces, 60_000).unref();
 
 // ─── Account Lockout ───────────────────────────────────────────────────────
 const MAX_FAILED_ATTEMPTS = 5;
