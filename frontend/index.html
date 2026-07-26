@@ -6,12 +6,12 @@
   <title>ZK Fitness - Zero-Knowledge Workout Tracker</title>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
   <link rel="stylesheet" href="styles.css" />
-  <script defer src="config.js"></script>
-  <script defer src="exercises.js"></script>
+  <script type="module" src="app.js"></script>
   <script defer src="vendor/argon2.min.js"></script>
-  <script defer src="app.js"></script>
+  <script defer src="vendor/noble-pqc.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
   <div class="app">
     <header class="app-header">
       <div class="logo">
@@ -33,12 +33,17 @@
       <section id="auth-view" class="view">
         <div class="auth-card">
           <h1>Privacy-First Strength Training</h1>
-          <p class="subtitle">Your workout data is encrypted in your browser. We cannot read it.</p>
+          <p class="subtitle">Your workout log is encrypted in your browser—no one else can read it, not even us.</p>
           <form id="auth-form">
             <label for="username">Username</label>
             <input id="username" name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" />
             <label for="password">Password</label>
             <input id="password" name="password" type="password" required minlength="8" autocomplete="current-password" />
+            <input type="text" id="website" name="website" class="honour" tabindex="-1" autocomplete="off" aria-hidden="true" />
+            <div id="invite-code-field" class="form-field hidden">
+              <label for="invite-code">Invite code (optional)</label>
+              <input id="invite-code" name="invite-code" type="text" autocomplete="off" placeholder="Only if required by this server" />
+            </div>
             <div id="password-strength" class="password-strength" aria-live="polite"></div>
             <div class="form-actions">
               <button type="submit" id="auth-btn">Register</button>
@@ -46,7 +51,7 @@
             </div>
             <div class="demo-actions">
               <button type="button" id="demo-mode-btn" class="secondary">👋 Try Demo Mode</button>
-              <p class="muted small">No account needed. Data is stored locally in your browser.</p>
+              <p class="muted small">No account needed—your demo data lives right in your browser.</p>
             </div>
             <p id="auth-error" class="error" role="status"></p>
           </form>
@@ -58,6 +63,7 @@
         <div class="panel quick-actions">
           <button id="start-empty-workout" class="btn-start">+ Start Empty Workout</button>
         </div>
+
         <div class="stats-grid">
           <div class="stat-card">
             <span class="stat-label">Level</span>
@@ -148,6 +154,7 @@
         <div class="section-header">
           <h2>Workout History</h2>
         </div>
+        <div id="history-calendar" class="history-calendar" aria-label="Workout calendar"></div>
         <div id="history-list" class="history-list"></div>
       </section>
 
@@ -169,13 +176,35 @@
         <p>Before you begin, here is how this app protects your data:</p>
         <ul>
           <li><strong>Zero-Knowledge Architecture:</strong> We never know your password. Keys are derived client-side using Argon2id.</li>
+          <li><strong>Post-Quantum Authentication:</strong> Login uses an ML-DSA-65 signature. The server stores only your public key.</li>
+          <li><strong>Post-Quantum Key Encapsulation:</strong> Every sync uses ML-KEM-768 to wrap a fresh AES-256-GCM data key. The server stores only the ciphertext.</li>
           <li><strong>End-to-End Encryption:</strong> Every workout is encrypted in your browser with AES-256-GCM.</li>
-          <li><strong>Server Cannot Read Data:</strong> The backend only stores random-looking ciphertext blobs. It has no access to plaintext.</li>
+          <li><strong>Server Cannot Read Data:</strong> The backend only stores public keys and random-looking ciphertext. It has no access to plaintext.</li>
           <li><strong>Demo Mode is Local:</strong> No server is used. Your data is encrypted and stored only in your browser's local storage.</li>
         </ul>
         <div class="modal-actions">
           <button id="start-demo-confirm-btn" type="button">Start Demo</button>
           <button id="cancel-demo-btn" class="secondary" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Modal -->
+    <div id="loading-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="loading-modal-title" aria-live="polite">
+      <div class="modal-content loading-modal-content">
+        <div class="loading-spinner" aria-hidden="true"></div>
+        <h2 id="loading-modal-title">Warming up…</h2>
+        <p id="loading-modal-message">The first post-quantum key generation can take a few seconds. Please hang tight.</p>
+      </div>
+    </div>
+
+    <!-- Exercise Detail Modal -->
+    <div id="exercise-detail-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="exercise-detail-title">
+      <div class="modal-content exercise-detail-modal-content">
+        <div id="exercise-detail-body"></div>
+        <div class="modal-actions">
+          <button id="exercise-detail-close" type="button">Close</button>
+          <button id="exercise-detail-add-to-workout" class="secondary" type="button">Add to Workout</button>
         </div>
       </div>
     </div>
@@ -197,7 +226,15 @@
     </div>
 
     <footer class="app-footer">
-      Zero-Knowledge Fitness Platform - Built by Samuel Degnan
+      <p class="app-footer__tagline">Privacy-first strength &amp; cardio tracking — your data stays in your browser.</p>
+      <p class="app-footer__links">
+        <a href="https://samueladegnan.github.io/">Portfolio</a>
+        <span aria-hidden="true">&bull;</span>
+        <a href="https://github.com/samueladegnan/zk-fitness-platform">GitHub</a>
+        <span aria-hidden="true">&bull;</span>
+        <a href="../index.html">Project Home</a>
+      </p>
+      <p class="app-footer__copyright">&copy; 2026 Samuel Degnan</p>
     </footer>
   </div>
 </body>

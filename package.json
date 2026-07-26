@@ -10,9 +10,12 @@
     "dev:client": "npx serve frontend -l 3001",
     "dev:stop": "npx kill-port 3000 3001 || true",
     "copy-argon2": "cp node_modules/argon2-browser/dist/argon2-bundled.min.js frontend/vendor/argon2.min.js",
+    "build:pqc": "node scripts/build-pqc.mjs",
     "migrate": "cd backend && npm run migrate",
     "install:backend": "cd backend && npm install",
-    "test": "cd backend && npm test"
+    "test:backend": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm test",
+    "test": "npm run test:backend && npm run test:frontend"
   },
   "keywords": [
     "zero-knowledge",
@@ -24,7 +27,9 @@
   "author": "Samuel Degnan",
   "license": "MIT",
   "devDependencies": {
+    "@noble/post-quantum": "^0.6.1",
     "argon2-browser": "^1.18.0",
+    "esbuild": "^0.28.1",
     "kill-port": "^2.0.1"
   }
 }

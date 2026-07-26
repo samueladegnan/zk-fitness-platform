@@ -8,6 +8,30 @@
  *        barbell math, confetti, sounds, plan editor, and history editing.
  */
 
+import {
+  calculateOneRepMax,
+  formatOneRm,
+  averageOneRm,
+  xpForSet,
+  xpForWorkout,
+  totalTonnage,
+  totalCardioDistance,
+  totalCardioCalories,
+  totalCardioDuration,
+  computeStats,
+  getLevel,
+  xpToNextLevel,
+  getPR,
+  getRecentPRs,
+  currentStreak,
+  escapeHtml,
+  getLevenshteinDistance,
+  getExerciseHistory,
+  getExerciseRecords,
+  getBestOneRepMax,
+} from './lib/fitness.js';
+import { getExerciseById, EXERCISE_CATALOG } from './exercises.js';
+
 // API_BASE can be overridden for production by setting window.ZK_API_BASE
 // (e.g. via an inline <script> in index.html or a CI build step).
 const API_BASE =
@@ -20,7 +44,9 @@ const API_BASE =
 let session = {
   username: null,
   token: null,
-  encKey: null,
+  dsaKeyPair: null,
+  kemKeyPair: null,
+  encKey: null, // demo mode only
   salt: null,
   data: {
     plans: [],
@@ -93,6 +119,9 @@ const DEMO_STORAGE_KEY = 'zkfitness_demo_data';
 // Callback for the shared security/demonstration modal.
 let securityModalCallback = null;
 
+// Track whether a loading modal is currently shown so nested calls don't hide it early.
+let loadingModalDepth = 0;
+
 // ─── Crypto Utilities ───────────────────────────────────────────────────────
 
 function arrayBufferToBase64(buffer) {
@@ -132,23 +161,57 @@ async function deriveKeys(masterPassword, salt) {
   const masterKey = await argon2.hash(argonParams);
 
   const keyMaterial = await crypto.subtle.importKey('raw', masterKey.hash, 'HKDF', false, ['deriveBits']);
-  const derive = async (info) =>
+  const derive = async (info, bits) =>
     crypto.subtle.deriveBits(
       { name: 'HKDF', hash: 'SHA-256', salt: bufferFromString('zkfitness'), info: bufferFromString(info) },
       keyMaterial,
-      256
+      bits
     );
 
-  const authKeyBuffer = await derive('auth-v1');
-  const encKeyBuffer = await derive('enc-v1');
+  // Deterministic seeds ensure the same password always recovers the same
+  // post-quantum keypair on any device.
+  const dsaSeed = new Uint8Array(await derive('pq-dsa-v1', 256));
+  const kemSeed = new Uint8Array(await derive('pq-kem-v1', 512));
 
-  const authKey = arrayBufferToBase64(authKeyBuffer);
-  const encKey = await crypto.subtle.importKey('raw', encKeyBuffer, { name: 'AES-GCM' }, false, [
-    'encrypt',
-    'decrypt',
-  ]);
+  const dsaKeyPair = window.NoblePQC.ml_dsa65.keygen(dsaSeed);
+  const kemKeyPair = window.NoblePQC.ml_kem768.keygen(kemSeed);
 
-  return { authKey, encKey };
+  return { dsaKeyPair, kemKeyPair };
+}
+
+// ─── Proof-of-Work Solver ───────────────────────────────────────────────────
+
+function hexLeadingZeroBits(hex) {
+  let bits = 0;
+  for (let i = 0; i < hex.length; i++) {
+    const n = parseInt(hex[i], 16);
+    if (n === 0) {
+      bits += 4;
+      continue;
+    }
+    const leading = 4 - Math.floor(Math.log2(n + 0.5) + 1);
+    bits += leading;
+    break;
+  }
+  return bits;
+}
+
+async function solvePoW(authKeyHash, nonce, difficulty) {
+  const enc = new TextEncoder();
+  let solution = 0;
+  while (true) {
+    const data = `${authKeyHash}:${nonce}:${solution}`;
+    const buf = await crypto.subtle.digest('SHA-256', enc.encode(data));
+    const hash = Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    if (hexLeadingZeroBits(hash) >= difficulty) return solution;
+    solution += 1;
+    if (solution % 1000 === 0) {
+      // Yield to keep the UI responsive during heavy workloads.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
 }
 
 async function getDemoEncKey() {
@@ -158,20 +221,47 @@ async function getDemoEncKey() {
   return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
 
-async function encryptData(data, key) {
+async function encryptData(data, keyOrKemPublic) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = bufferFromString(JSON.stringify(data));
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
-  return {
+
+  let aesKey;
+  let kemCiphertext;
+
+  if (keyOrKemPublic instanceof CryptoKey) {
+    // Demo / legacy mode: use the provided AES key directly.
+    aesKey = keyOrKemPublic;
+  } else {
+    // Real mode: encapsulate a fresh shared secret with the user's ML-KEM
+    // public key. The shared secret is the AES data key.
+    const { cipherText, sharedSecret } = window.NoblePQC.ml_kem768.encapsulate(keyOrKemPublic);
+    aesKey = await crypto.subtle.importKey('raw', sharedSecret, { name: 'AES-GCM' }, false, ['encrypt']);
+    kemCiphertext = arrayBufferToBase64(cipherText);
+  }
+
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, plaintext);
+  const result = {
     iv: arrayBufferToBase64(iv),
     ciphertext: arrayBufferToBase64(ciphertext),
   };
+  if (kemCiphertext) result.kemCiphertext = kemCiphertext;
+  return result;
 }
 
-async function decryptData(encrypted, key) {
+async function decryptData(encrypted, keyOrKemSecret) {
   const iv = new Uint8Array(base64ToArrayBuffer(encrypted.iv));
   const ciphertext = base64ToArrayBuffer(encrypted.ciphertext);
-  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+
+  let aesKey;
+  if (keyOrKemSecret instanceof CryptoKey) {
+    aesKey = keyOrKemSecret;
+  } else {
+    const kemCipherText = base64ToArrayBuffer(encrypted.kemCiphertext);
+    const sharedSecret = window.NoblePQC.ml_kem768.decapsulate(kemCipherText, keyOrKemSecret);
+    aesKey = await crypto.subtle.importKey('raw', sharedSecret, { name: 'AES-GCM' }, false, ['decrypt']);
+  }
+
+  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, ciphertext);
   return JSON.parse(new TextDecoder().decode(plaintext));
 }
 
@@ -224,11 +314,17 @@ async function demoApi(path, options) {
   const method = options.method || 'GET';
   if (path === '/sync' && method === 'GET') {
     const stored = localStorage.getItem(DEMO_STORAGE_KEY);
-    return { exists: !!stored, encryptedBlob: stored };
+    const kemCiphertext = localStorage.getItem(`${DEMO_STORAGE_KEY}_kem`) || '';
+    return { exists: !!stored, encryptedBlob: stored, kemCiphertext };
   }
   if (path === '/sync' && method === 'PUT') {
-    localStorage.setItem(DEMO_STORAGE_KEY, JSON.parse(options.body).encryptedBlob);
+    const body = JSON.parse(options.body);
+    localStorage.setItem(DEMO_STORAGE_KEY, body.encryptedBlob);
+    if (body.kemCiphertext) localStorage.setItem(`${DEMO_STORAGE_KEY}_kem`, body.kemCiphertext);
     return { message: 'Demo sync stored' };
+  }
+  if (path === '/auth/challenge') {
+    return { nonce: 'demo-challenge-nonce', difficulty: 4 };
   }
   if (path.startsWith('/auth/')) {
     return { token: 'demo-token', username: 'Demo User' };
@@ -242,59 +338,6 @@ function isCardioExercise(exerciseId) {
   return getExercise(exerciseId).category === 'Cardio';
 }
 
-function xpForSet(set) {
-  // Cardio: reward duration + intensity (calories proxy)
-  if (set.durationMinutes > 0) {
-    return Math.max(10, Math.round((set.durationMinutes || 0) * 1.5 + (set.calories || 0) * 0.1));
-  }
-  const weight = set.weight || 0;
-  const reps = set.reps || 0;
-  return weight > 0 && reps > 0 ? Math.round(weight * reps * 0.15) : 0;
-}
-
-function xpForWorkout(sets) {
-  const base = sets.reduce((sum, s) => sum + (s.xp || xpForSet(s)), 0);
-  // Only award the completion bonus if the workout has at least one valid set.
-  return sets.length > 0 ? base + 50 : 0;
-}
-
-function totalTonnage(sets) {
-  return sets.reduce((sum, s) => sum + (s.weight || 0) * (s.reps || 0), 0);
-}
-
-function totalCardioDistance(sets) {
-  return sets.reduce((sum, s) => sum + (s.distance || 0), 0);
-}
-
-function totalCardioCalories(sets) {
-  return sets.reduce((sum, s) => sum + (s.calories || 0), 0);
-}
-
-function totalCardioDuration(sets) {
-  return sets.reduce((sum, s) => sum + (s.durationMinutes || 0), 0);
-}
-
-function computeStats() {
-  const workouts = session.data.workouts;
-  const totalXp = workouts.reduce((sum, w) => sum + (w.xp || 0), 0);
-  const tonnage = workouts.reduce((sum, w) => sum + totalTonnage(w.exercises.flatMap((e) => e.sets)), 0);
-  const allSets = workouts.flatMap((w) => w.exercises.flatMap((e) => e.sets));
-  const distance = totalCardioDistance(allSets);
-  const calories = totalCardioCalories(allSets);
-  return { totalXp, tonnage, workouts: workouts.length, distance, calories };
-}
-
-function getLevel(totalXp) {
-  return Math.max(1, Math.floor(Math.sqrt((totalXp || 0) / 100)) + 1);
-}
-
-function xpToNextLevel(totalXp) {
-  const currentLevel = getLevel(totalXp);
-  const next = currentLevel * currentLevel * 100;
-  const prev = (currentLevel - 1) * (currentLevel - 1) * 100;
-  return { next, prev, current: totalXp - prev, range: next - prev };
-}
-
 function computeBadges(stats) {
   const badges = [];
   if (stats.workouts >= 1) badges.push({ id: 'first_workout', name: 'First Workout', icon: '️' });
@@ -305,60 +348,26 @@ function computeBadges(stats) {
   return badges;
 }
 
-function currentStreak() {
-  const dates = [...new Set(session.data.workouts.map((w) => new Date(w.date).toDateString()))].sort();
-  if (dates.length === 0) return 0;
+// ─── Auto-populate helpers ───────────────────────────────────────────────────
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const last = new Date(dates[dates.length - 1]);
-  last.setHours(0, 0, 0, 0);
-  const daysSinceLast = Math.floor((today - last) / (1000 * 60 * 60 * 24));
-
-  if (daysSinceLast > 1) return 0;
-
-  let streak = 1;
-  for (let i = dates.length - 1; i > 0; i--) {
-    const d1 = new Date(dates[i]);
-    const d2 = new Date(dates[i - 1]);
-    d1.setHours(0, 0, 0, 0);
-    d2.setHours(0, 0, 0, 0);
-    if ((d1 - d2) / (1000 * 60 * 60 * 24) === 1) streak += 1;
-    else break;
+function getLastSetValues(exerciseId) {
+  for (const w of session.data.workouts) {
+    const ex = w.exercises.find((e) => e.exerciseId === exerciseId);
+    if (!ex) continue;
+    for (let i = ex.sets.length - 1; i >= 0; i--) {
+      const s = ex.sets[i];
+      if (s.type === 'working') return s;
+    }
   }
-  return streak;
+  return null;
 }
 
-function getPR(exerciseId) {
-  let pr = { weight: 0, reps: 0, date: null };
-  session.data.workouts.forEach((w) => {
-    w.exercises.forEach((e) => {
-      if (e.exerciseId !== exerciseId) return;
-      e.sets.forEach((s) => {
-        if (s.type !== 'working') return;
-        if (s.weight > pr.weight || (s.weight === pr.weight && s.reps > pr.reps)) {
-          pr = { weight: s.weight, reps: s.reps, date: w.date };
-        }
-      });
-    });
-  });
-  return pr;
-}
-
-function getRecentPRs(limit = 3) {
-  const all = [];
-  const seen = new Set();
-  [...session.data.workouts].reverse().forEach((w) => {
-    w.exercises.forEach((e) => {
-      if (seen.has(e.exerciseId)) return;
-      const pr = getPR(e.exerciseId);
-      if (pr.weight > 0) {
-        all.push({ exerciseId: e.exerciseId, ...pr });
-        seen.add(e.exerciseId);
-      }
-    });
-  });
-  return all.slice(0, limit);
+function getLastExerciseSettings(exerciseId) {
+  for (const w of session.data.workouts) {
+    const ex = w.exercises.find((e) => e.exerciseId === exerciseId);
+    if (ex) return ex;
+  }
+  return null;
 }
 
 // ─── Exercise & Workout Helpers ─────────────────────────────────────────────
@@ -369,18 +378,19 @@ function getExercise(id) {
   return getExerciseById(id) || { id, name: id, category: 'Custom', equipment: 'Other', defaultRestSeconds: 90 };
 }
 
-function createSet(type = 'working') {
+function createSet(type = 'working', exerciseId = null) {
+  const last = type === 'working' && exerciseId ? getLastSetValues(exerciseId) : null;
   return {
     id: crypto.randomUUID(),
     type,
-    weight: '',
-    reps: '',
-    rpe: '',
+    weight: last ? last.weight : '',
+    reps: last ? last.reps : '',
+    rpe: last ? last.rpe : '',
     // Cardio fields
-    distance: '',
-    durationMinutes: '',
-    heartRate: '',
-    calories: '',
+    distance: last ? last.distance : '',
+    durationMinutes: last ? last.durationMinutes : '',
+    heartRate: last ? last.heartRate : '',
+    calories: last ? last.calories : '',
     done: false,
     xp: 0,
   };
@@ -423,13 +433,14 @@ function renderSetFields(exercise, set, exIndex, setIndex, isCardio) {
 function createWorkoutExercise(exerciseId, targetSets = 3, targetReps = 8, restSeconds = null) {
   const ex = getExercise(exerciseId);
   restSeconds = restSeconds || ex.defaultRestSeconds || session.data.preferences.defaultRestSeconds;
+  const last = getLastExerciseSettings(exerciseId);
   return {
     id: crypto.randomUUID(),
     exerciseId,
-    targetSets,
-    targetReps,
-    restSeconds,
-    sets: [createSet('working')],
+    targetSets: last && last.sets.length > 0 ? last.sets.length : targetSets,
+    targetReps: last ? last.targetReps : targetReps,
+    restSeconds: last ? last.restSeconds : restSeconds,
+    sets: [createSet('working', exerciseId)],
   };
 }
 
@@ -557,6 +568,8 @@ function showToast(message, type = 'info') {
   if (!toast) {
     toast = document.createElement('div');
     toast.id = 'toast';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
     document.body.appendChild(toast);
   }
   toast.textContent = message;
@@ -716,20 +729,54 @@ function renderPasswordStrength(password) {
   meter.className = `password-strength strength-${score}`;
 }
 
-async function performPasswordAuth(username, password) {
+async function performPasswordAuth(username, password, inviteCode) {
   const salt = await deriveSalt(username);
-  const { authKey, encKey } = await deriveKeys(password, salt);
-  session = { ...session, username, encKey, salt };
+  const { dsaKeyPair, kemKeyPair } = await deriveKeys(password, salt);
+  session = { ...session, username, dsaKeyPair, kemKeyPair, salt };
+
+  const dsaPublicKeyBase64 = arrayBufferToBase64(dsaKeyPair.publicKey);
+  const kemPublicKeyBase64 = arrayBufferToBase64(kemKeyPair.publicKey);
 
   if (isRegisterMode) {
+    // Solve a proof-of-work challenge before registering to discourage bots.
+    let challengePayload = {};
+    try {
+      const challengeRes = await api('/auth/challenge');
+      const solution = await solvePoW(dsaPublicKeyBase64, challengeRes.nonce, challengeRes.difficulty || 12);
+      challengePayload = { challenge: challengeRes.nonce, solution };
+    } catch (err) {
+      // If the backend does not support challenges yet, fall back gracefully.
+      if (!err.message?.includes('Not found') && !err.message?.includes('not configured')) {
+        throw err;
+      }
+    }
+
     await api('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username, authKeyHash: authKey }),
+      body: JSON.stringify({
+        username,
+        dsaPublicKey: dsaPublicKeyBase64,
+        kemPublicKey: kemPublicKeyBase64,
+        ...challengePayload,
+        inviteCode,
+      }),
     });
   } else {
+    // Two-step PQC login: get a nonce from the server, then sign it with the
+    // user's ML-DSA private key. The server never sees the private key.
+    const nonceRes = await api('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username }),
+    });
+    if (!nonceRes.nonce) throw new Error('Server did not return a login nonce.');
+
+    const signature = window.NoblePQC.ml_dsa65.sign(bufferFromString(nonceRes.nonce), dsaKeyPair.secretKey);
     await api('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, authKeyHash: authKey }),
+      body: JSON.stringify({
+        username,
+        signature: arrayBufferToBase64(signature),
+      }),
     });
   }
 
@@ -753,16 +800,52 @@ function openSecurityModal(label, callback) {
   if (modal) modal.classList.remove('hidden');
 }
 
+function setAuthFormDisabled(disabled) {
+  const authForm = $('auth-form');
+  const authBtn = $('auth-btn');
+  if (authForm) {
+    authForm.setAttribute('aria-busy', String(disabled));
+    authForm.querySelectorAll('input, button').forEach((el) => { el.disabled = disabled; });
+  }
+  if (authBtn) authBtn.disabled = disabled;
+}
+
+function showLoadingModal(message) {
+  loadingModalDepth += 1;
+  const modal = $('loading-modal');
+  const msgEl = $('loading-modal-message');
+  if (msgEl && message) msgEl.textContent = message;
+  if (modal) modal.classList.remove('hidden');
+  setAuthFormDisabled(true);
+}
+
+function hideLoadingModal() {
+  if (loadingModalDepth > 0) loadingModalDepth -= 1;
+  if (loadingModalDepth === 0) {
+    const modal = $('loading-modal');
+    if (modal) modal.classList.add('hidden');
+    setAuthFormDisabled(false);
+  }
+}
+
 function initAuthUI() {
   const authForm = $('auth-form');
   const authBtn = $('auth-btn');
   const toggleBtn = $('toggle-mode');
 
+  function updateInviteField() {
+    const inviteField = $('invite-code-field');
+    if (inviteField) inviteField.classList.toggle('hidden', !isRegisterMode);
+  }
+
   toggleBtn.addEventListener('click', () => {
     isRegisterMode = !isRegisterMode;
     authBtn.textContent = isRegisterMode ? 'Register' : 'Log in';
     toggleBtn.textContent = isRegisterMode ? 'Already have an account? Log in' : 'Need an account? Register';
+    updateInviteField();
   });
+
+  updateInviteField();
 
   const passwordInput = $('password');
   if (passwordInput) {
@@ -775,6 +858,13 @@ function initAuthUI() {
     const username = $('username').value.trim();
     const password = $('password').value;
 
+    if ($('website').value) {
+      $('auth-error').textContent = 'Something went wrong. Please try again.';
+      return;
+    }
+
+    const inviteCode = $('invite-code')?.value.trim() || undefined;
+
     if (isRegisterMode) {
       const score = evaluatePasswordStrength(password);
       if (score < 3) {
@@ -783,10 +873,15 @@ function initAuthUI() {
       }
     }
 
+    const actionText = isRegisterMode ? 'Creating your account' : 'Logging you in';
+    showLoadingModal(`${actionText} — the post-quantum crypto setup can take a few seconds the first time. Please wait.`);
+
     try {
-      await performPasswordAuth(username, password);
+      await performPasswordAuth(username, password, inviteCode);
     } catch (err) {
       $('auth-error').textContent = err.message;
+    } finally {
+      hideLoadingModal();
     }
   });
 
@@ -882,6 +977,8 @@ async function logout() {
   session = {
     username: null,
     token: null,
+    dsaKeyPair: null,
+    kemKeyPair: null,
     encKey: null,
     salt: null,
     data: {
@@ -906,11 +1003,11 @@ function renderDashboard() {
     startEmptyBtn.onclick = () => startEmptyWorkout();
   }
 
-  const stats = computeStats();
+  const stats = computeStats(session.data.workouts);
   const level = getLevel(stats.totalXp);
   const xpInfo = xpToNextLevel(stats.totalXp);
   const badges = computeBadges(stats);
-  const recentPRs = getRecentPRs();
+  const recentPRs = getRecentPRs(session.data.workouts, 3, getExercise);
   const units = session.data.preferences.units || 'kg';
 
   const unitsBtn = $('units-toggle');
@@ -925,7 +1022,7 @@ function renderDashboard() {
   $('stat-xp').textContent = stats.totalXp.toLocaleString();
   $('stat-tonnage').textContent = `${stats.tonnage.toLocaleString()} ${units}`;
   $('stat-workouts').textContent = stats.workouts;
-  $('stat-streak').textContent = currentStreak();
+  $('stat-streak').textContent = currentStreak(session.data.workouts);
   $('stat-level').textContent = level;
   $('stat-distance').textContent = `${stats.distance.toFixed(1)} ${session.data.preferences.units === 'kg' ? 'km' : 'mi'}`;
   $('stat-calories').textContent = `${stats.calories.toLocaleString()} kcal`;
@@ -936,14 +1033,14 @@ function renderDashboard() {
 
   const badgeContainer = $('badges-list');
   if (badges.length === 0) {
-    badgeContainer.innerHTML = '<p class="muted">Complete workouts to earn your first badge.</p>';
+    badgeContainer.innerHTML = '<p class="muted">Finish a workout and your first badge will land here.</p>';
   } else {
     badgeContainer.innerHTML = badges.map((b) => `<span class="badge" title="${b.name}">${b.icon} ${b.name}</span>`).join('');
   }
 
   const prContainer = $('pr-list');
   if (recentPRs.length === 0) {
-    prContainer.innerHTML = '<p class="muted">Log a workout to start tracking personal records.</p>';
+    prContainer.innerHTML = '<p class="muted">Log a workout and your latest personal records will show up here.</p>';
   } else {
     prContainer.innerHTML = recentPRs
       .map((pr) => `<div class="pr-item"><span>${getExercise(pr.exerciseId).name}</span><strong>${pr.weight}${units} × ${pr.reps}</strong></div>`)
@@ -955,7 +1052,7 @@ function renderDashboard() {
   tbody.innerHTML = '';
   if (recent.length === 0) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="5" class="muted">No workouts yet. Start one from the Plans tab or the button below.</td>`;
+    tr.innerHTML = `<td colspan="5" class="muted">No workouts yet—pick a plan and get moving!</td>`;
     tbody.appendChild(tr);
   } else {
     recent.forEach((w) => {
@@ -968,6 +1065,285 @@ function renderDashboard() {
       tbody.appendChild(tr);
     });
   }
+
+}
+
+// ─── Exercise Detail ────────────────────────────────────────────────────────
+
+function renderExerciseChart(history, container, isCardio) {
+  if (!history.length) {
+    container.innerHTML = '<p class="muted">No data to chart yet.</p>';
+    return;
+  }
+
+  const width = 600;
+  const height = 220;
+  const padding = { top: 20, right: 20, bottom: 40, left: 40 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+
+  const values = isCardio
+    ? history.map((h) => h.distance)
+    : history.map((h) => h.oneRm);
+  const maxValue = Math.max(...values, 1);
+  const minValue = Math.min(...values, 0);
+  const range = Math.max(maxValue - minValue, 1);
+
+  const xFor = (i) => padding.left + (i / Math.max(history.length - 1, 1)) * chartWidth;
+  const yFor = (v) => padding.top + chartHeight - ((v - minValue) / range) * chartHeight;
+
+  const points = history.map((h, i) => ({ x: xFor(i), y: yFor(isCardio ? h.distance : h.oneRm), value: isCardio ? h.distance : h.oneRm }));
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', `${isCardio ? 'Distance' : 'Estimated 1RM'} over time`);
+
+  // Grid lines
+  for (let i = 0; i <= 4; i += 1) {
+    const y = padding.top + (chartHeight / 4) * i;
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', padding.left);
+    line.setAttribute('y1', y);
+    line.setAttribute('x2', width - padding.right);
+    line.setAttribute('y2', y);
+    line.style.stroke = 'var(--border)';
+    line.setAttribute('stroke-width', '1');
+    svg.appendChild(line);
+  }
+
+  // Line path
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', pathD);
+  path.setAttribute('fill', 'none');
+  path.style.stroke = 'var(--accent)';
+  path.setAttribute('stroke-width', '3');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  svg.appendChild(path);
+
+  // Data points
+  points.forEach((p) => {
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', p.x);
+    circle.setAttribute('cy', p.y);
+    circle.setAttribute('r', '4');
+    circle.style.fill = 'var(--accent)';
+    circle.style.stroke = 'var(--card)';
+    circle.setAttribute('stroke-width', '2');
+    svg.appendChild(circle);
+  });
+
+  // Labels
+  const xAxisLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  xAxisLabel.setAttribute('x', width / 2);
+  xAxisLabel.setAttribute('y', height - 5);
+  xAxisLabel.setAttribute('text-anchor', 'middle');
+  xAxisLabel.setAttribute('fill', 'var(--muted)');
+  xAxisLabel.setAttribute('font-size', '12');
+  xAxisLabel.textContent = 'Workout (oldest to newest)';
+  svg.appendChild(xAxisLabel);
+
+  const yAxisLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  yAxisLabel.setAttribute('x', 10);
+  yAxisLabel.setAttribute('y', height / 2);
+  yAxisLabel.setAttribute('fill', 'var(--muted)');
+  yAxisLabel.setAttribute('font-size', '12');
+  yAxisLabel.setAttribute('transform', `rotate(-90, 10, ${height / 2})`);
+  yAxisLabel.textContent = isCardio ? 'Distance' : 'Estimated 1RM';
+  svg.appendChild(yAxisLabel);
+
+  container.innerHTML = '';
+  container.appendChild(svg);
+}
+
+function openExerciseDetail(exerciseId) {
+  const ex = getExercise(exerciseId);
+  const history = getExerciseHistory(session.data.workouts, exerciseId);
+  const records = getExerciseRecords(session.data.workouts, exerciseId, isCardioExercise);
+  const isCardio = ex.category === 'Cardio';
+  const units = session.data.preferences.units || 'kg';
+  const modal = $('exercise-detail-modal');
+  const body = $('exercise-detail-body');
+
+  const best1rm = records && !isCardio ? Math.round(records.best1rm) : null;
+
+  body.innerHTML = `
+    <div class="exercise-detail-body">
+      <div class="exercise-detail-header">
+        <h2 id="exercise-detail-title">${escapeHtml(ex.name)}</h2>
+        <div class="exercise-detail-meta">
+          <span class="tag">${ex.category}</span>
+          <span class="tag">${ex.equipment || 'Other'}</span>
+          ${best1rm ? `<span class="tag">Best Est. 1RM: ${best1rm} ${units}</span>` : ''}
+        </div>
+      </div>
+
+      <div class="exercise-detail-section">
+        <h3>Records</h3>
+        <div class="exercise-records-grid">
+          ${isCardio ? `
+            <div class="exercise-record-card">
+              <span class="label">Max Distance</span>
+              <span class="value">${records ? records.distance : '—'} ${units}</span>
+            </div>
+            <div class="exercise-record-card">
+              <span class="label">Max Duration</span>
+              <span class="value">${records ? `${records.duration} min` : '—'}</span>
+            </div>
+          ` : `
+            <div class="exercise-record-card">
+              <span class="label">Max Weight</span>
+              <span class="value">${records ? `${records.maxWeight} ${units}` : '—'}</span>
+            </div>
+            <div class="exercise-record-card">
+              <span class="label">Max Reps</span>
+              <span class="value">${records ? records.maxReps : '—'}</span>
+            </div>
+            <div class="exercise-record-card">
+              <span class="label">Best Est. 1RM</span>
+              <span class="value">${best1rm ? `${best1rm} ${units}` : '—'}</span>
+            </div>
+          `}
+        </div>
+      </div>
+
+      <div class="exercise-detail-section">
+        <h3>Progress Chart</h3>
+        <div class="exercise-detail-chart" id="exercise-chart"></div>
+        <div class="chart-label">${isCardio ? 'Distance per workout' : 'Estimated one-rep max over time'}</div>
+      </div>
+
+      <div class="exercise-detail-section">
+        <h3>1RM Calculator</h3>
+        <div class="exercise-detail-1rm">
+          <div class="set-field">
+            <label>Weight (${units})</label>
+            <input id="detail-1rm-weight" type="number" step="0.1" value="" />
+          </div>
+          <div class="set-field">
+            <label>Reps</label>
+            <input id="detail-1rm-reps" type="number" step="1" min="1" value="" />
+          </div>
+          <div class="exercise-detail-1rm-result">
+            <strong id="detail-1rm-result">—</strong>
+            <span>Estimated 1RM</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="exercise-detail-section">
+        <h3>History</h3>
+        ${history.length === 0 ? '<p class="muted">No history for this exercise yet.</p>' : `
+          <table class="exercise-history-table">
+            <thead>
+              ${isCardio ? '<tr><th>Date</th><th>Workout</th><th>Distance</th><th>Duration</th></tr>' : '<tr><th>Date</th><th>Workout</th><th>Weight</th><th>Reps</th><th>Est. 1RM</th></tr>'}
+            </thead>
+            <tbody>
+              ${[...history].reverse().slice(0, 20).map((h) => isCardio ? `
+                <tr>
+                  <td>${new Date(h.date).toLocaleDateString()}</td>
+                  <td>${escapeHtml(h.workoutName)}</td>
+                  <td>${h.distance > 0 ? `${h.distance} ${units}` : '—'}</td>
+                  <td>${h.durationMinutes > 0 ? `${h.durationMinutes} min` : '—'}</td>
+                </tr>
+              ` : `
+                <tr>
+                  <td>${new Date(h.date).toLocaleDateString()}</td>
+                  <td>${escapeHtml(h.workoutName)}</td>
+                  <td>${h.weight > 0 ? `${h.weight} ${units}` : '—'}</td>
+                  <td>${h.reps > 0 ? h.reps : '—'}</td>
+                  <td>${h.oneRm > 0 ? Math.round(h.oneRm) : '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+    </div>
+  `;
+
+  // Render chart after the DOM exists.
+  const chartContainer = $('exercise-chart');
+  if (chartContainer) renderExerciseChart(history, chartContainer, isCardio);
+
+  // Wire up the 1RM calculator.
+  const weightInput = $('detail-1rm-weight');
+  const repsInput = $('detail-1rm-reps');
+  const resultEl = $('detail-1rm-result');
+  if (weightInput && repsInput && resultEl) {
+    const update = () => {
+      const result = calculateOneRepMax(weightInput.value, repsInput.value);
+      resultEl.textContent = formatOneRm(result ? (result.epley + result.brzycki) / 2 : null, units);
+    };
+    weightInput.addEventListener('input', update);
+    repsInput.addEventListener('input', update);
+    // Prefill with the best historical set if available.
+    if (records && records.heaviestSet) {
+      weightInput.value = records.heaviestSet.weight;
+      repsInput.value = records.heaviestSet.reps;
+      update();
+    }
+  }
+
+  // Wire up modal buttons and accessibility.
+  const closeBtn = $('exercise-detail-close');
+  const addBtn = $('exercise-detail-add-to-workout');
+  if (closeBtn) closeBtn.onclick = () => modal.classList.add('hidden');
+  if (addBtn) {
+    addBtn.onclick = () => {
+      modal.classList.add('hidden');
+      const workout = getActiveWorkout();
+      if (workout) {
+        workout.exercises.push(createWorkoutExercise(exerciseId));
+        setActiveWorkout(workout);
+        renderActiveWorkout();
+      } else {
+        showToast('No active workout. Start one from the dashboard or plans.', 'error');
+      }
+    };
+  }
+
+  modal.classList.remove('hidden');
+  if (closeBtn) closeBtn.focus();
+
+  // Focus trap for accessibility.
+  const focusable = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  let focusables = Array.from(modal.querySelectorAll(focusable)).filter((el) => !el.disabled);
+
+  function onDetailKeydown(e) {
+    if (e.key === 'Escape') {
+      modal.classList.add('hidden');
+      cleanup();
+      return;
+    }
+    if (e.key === 'Tab' && focusables.length > 0) {
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }
+  function onDetailBackdrop(e) {
+    if (e.target === modal) {
+      modal.classList.add('hidden');
+      cleanup();
+    }
+  }
+  function cleanup() {
+    document.removeEventListener('keydown', onDetailKeydown);
+    modal.removeEventListener('click', onDetailBackdrop);
+    focusables = [];
+  }
+  document.addEventListener('keydown', onDetailKeydown);
+  modal.addEventListener('click', onDetailBackdrop);
 }
 
 function renderPlans() {
@@ -1137,15 +1513,6 @@ function openPlanEditor(planId) {
   renderEditor();
 }
 
-function escapeHtml(str) {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
 let exerciseSelectCallback = null;
 let exerciseSelectButtonText = 'Add to Workout';
 
@@ -1153,18 +1520,15 @@ function renderExercises() {
   const container = $('exercises-list');
   exerciseSelectButtonText = 'Add to Workout';
   const cats = ['All', ...new Set(EXERCISE_CATALOG.map((e) => e.category))];
-  const filterHtml = `<div class="filter-row">${cats
-    .map((c) => `<button class="filter-btn" data-cat="${c}">${c}</button>`)
-    .join('')}</div>`;
-  const searchHtml = `
-    <div class="search-row">
-      <input id="exercise-search" type="search" placeholder="Search exercises (e.g. 'bench', 'treadmill', 'cardio')" aria-label="Search exercises" />
-    </div>
-  `;
 
-  const customForm = `
-    <div class="panel custom-exercise-form">
-      <h3>Add Custom Exercise</h3>
+  container.innerHTML = `
+    <div class="exercise-search-box">
+      <span aria-hidden="true">🔍</span>
+      <input id="exercise-search" type="search" placeholder="Search exercises, categories, or equipment…" aria-label="Search exercises" autocomplete="off" />
+      <button id="toggle-custom-ex" type="button" aria-expanded="false" aria-controls="custom-exercise-panel" title="Add a custom exercise">+</button>
+    </div>
+    <div id="custom-exercise-panel" class="panel custom-exercise-form hidden" hidden>
+      <h3>Add a Custom Exercise</h3>
       <div class="row">
         <input id="custom-ex-name" type="text" placeholder="Exercise name" />
         <select id="custom-ex-category">
@@ -1175,9 +1539,22 @@ function renderExercises() {
         <button id="add-custom-ex" type="button">Add Exercise</button>
       </div>
     </div>
+    <div class="filter-row" role="group" aria-label="Filter by category">
+      ${cats.map((c) => `<button class="filter-btn" data-cat="${c}">${c}</button>`).join('')}
+    </div>
+    <div id="exercises-grid"></div>
   `;
 
-  container.innerHTML = customForm + searchHtml + filterHtml + '<div id="exercises-grid"></div>';
+  const customPanel = $('custom-exercise-panel');
+  const toggleBtn = $('toggle-custom-ex');
+  toggleBtn.addEventListener('click', () => {
+    const isHidden = customPanel.classList.contains('hidden');
+    customPanel.classList.toggle('hidden', !isHidden);
+    customPanel.hidden = !isHidden;
+    toggleBtn.setAttribute('aria-expanded', String(isHidden));
+    toggleBtn.textContent = isHidden ? '−' : '+';
+    if (isHidden) $('custom-ex-name').focus();
+  });
 
   $('add-custom-ex').addEventListener('click', () => {
     const name = $('custom-ex-name').value.trim();
@@ -1196,25 +1573,60 @@ function renderExercises() {
     syncDataImmediate();
     $('custom-ex-name').value = '';
     renderExercises();
+    showToast(`${name} added to your exercise list.`, 'info');
   });
 
   function renderGrid(category, searchQuery = '') {
     const grid = $('exercises-grid');
     const custom = session.data.customExercises || [];
 
-    let builtIn;
-    let all;
+    const builtIn =
+      category === 'All' ? EXERCISE_CATALOG : EXERCISE_CATALOG.filter((e) => e.category === category);
+    let all = category === 'All' ? [...builtIn, ...custom] : [...builtIn, ...custom.filter((e) => e.category === category)];
     if (searchQuery.trim()) {
-      builtIn = searchExercises(searchQuery);
-      const matchedCustom = searchExercises(searchQuery, custom);
-      all = [...builtIn, ...matchedCustom];
-    } else {
-      builtIn = category === 'All' ? EXERCISE_CATALOG : EXERCISE_CATALOG.filter((e) => e.category === category);
-      all = category === 'All' ? [...builtIn, ...custom] : [...builtIn, ...custom.filter((e) => e.category === category)];
+      const q = searchQuery.toLowerCase().trim();
+      const qTokens = q.split(/\s+/);
+      const ranked = all
+        .map((ex) => {
+          const name = ex.name.toLowerCase();
+          const cat = ex.category.toLowerCase();
+          const equip = ex.equipment.toLowerCase();
+          let score = 0;
+
+          // Strong matches still win.
+          if (name.startsWith(q)) score += 100;
+          else if (name.includes(q)) score += 50;
+
+          if (cat.startsWith(q)) score += 30;
+          else if (cat.includes(q)) score += 15;
+          if (equip.includes(q)) score += 10;
+
+          // Fuzzy typo matching for each query token.
+          if (score < 50) {
+            const nameTokens = name.split(/\s+/);
+            for (const qWord of qTokens) {
+              if (qWord.length <= 2) continue;
+              let bestDist = Infinity;
+              for (const nWord of nameTokens) {
+                if (Math.abs(qWord.length - nWord.length) <= 2) {
+                  bestDist = Math.min(bestDist, getLevenshteinDistance(qWord, nWord));
+                }
+              }
+              if (bestDist <= 2) {
+                score += 20 - bestDist * 5;
+              }
+            }
+          }
+
+          return { ex, score };
+        })
+        .filter((i) => i.score > 0)
+        .sort((a, b) => b.score - a.score);
+      all = ranked.map((i) => i.ex);
     }
 
     if (all.length === 0) {
-      grid.innerHTML = `<p class="muted">No exercises found. Try a different search term.</p>`;
+      grid.innerHTML = `<p class="muted">No exercises match your search. Try a different term or add a custom exercise.</p>`;
       return;
     }
 
@@ -1225,7 +1637,7 @@ function renderExercises() {
       .map(
         (ex) => `
         <div class="exercise-card" data-id="${ex.id}">
-          <h4>${ex.name}</h4>
+          <h4 class="exercise-card-name" data-id="${ex.id}">${ex.name}</h4>
           <span class="tag">${ex.category}</span>
           <span class="tag">${ex.equipment}</span>
           <div class="exercise-card-actions">
@@ -1242,6 +1654,14 @@ function renderExercises() {
         btn.addEventListener('click', () => exerciseSelectCallback(btn.dataset.id));
       });
     }
+
+    // Click exercise name to view details.
+    grid.querySelectorAll('.exercise-card-name').forEach((title) => {
+      title.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openExerciseDetail(title.dataset.id);
+      });
+    });
 
     grid.querySelectorAll('.btn-delete-custom-ex').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -1361,7 +1781,7 @@ function renderActiveWorkout(pastWorkoutId) {
   container.innerHTML = workout.exercises
     .map((exercise, exIndex) => {
       const ex = getExercise(exercise.exerciseId);
-      const pr = getPR(exercise.exerciseId);
+      const pr = getPR(session.data.workouts, exercise.exerciseId);
       const isCardio = isCardioExercise(exercise.exerciseId);
       return `
         <div class="active-exercise" data-idx="${exIndex}">
@@ -1371,11 +1791,12 @@ function renderActiveWorkout(pastWorkoutId) {
               ${isPastEdit ? '' : `<button class="secondary btn-move" data-dir="up" data-idx="${exIndex}" ${exIndex === 0 ? 'disabled' : ''} aria-label="Move exercise up">↑</button>`}
               ${isPastEdit ? '' : `<button class="secondary btn-move" data-dir="down" data-idx="${exIndex}" ${exIndex === workout.exercises.length - 1 ? 'disabled' : ''} aria-label="Move exercise down">↓</button>`}
               <div>
-                <h3>${ex.name}</h3>
+                <h3><button class="btn-exercise-title" data-exercise-id="${exercise.exerciseId}" title="View exercise details">${ex.name}</button></h3>
                 ${!isCardio && pr.weight > 0 ? `<span class="pr-badge">PR ${pr.weight}${session.data.preferences.units} × ${pr.reps}</span>` : ''}
               </div>
             </div>
             <div class="exercise-actions">
+              <button class="secondary btn-exercise-info" data-exercise-id="${exercise.exerciseId}" title="View exercise history, records, and 1RM"> Info</button>
               <div class="rest-setting" title="Rest time between sets">
                 <label>Rest</label>
                 <input type="number" value="${exercise.restSeconds}" data-idx="${exIndex}" data-field="restSeconds" />
@@ -1448,7 +1869,8 @@ function renderActiveWorkout(pastWorkoutId) {
   container.querySelectorAll('.btn-add-set').forEach((btn) => {
     btn.addEventListener('click', () => {
       const exIdx = Number(btn.dataset.idx);
-      workout.exercises[exIdx].sets.push(createSet('working'));
+      const exercise = workout.exercises[exIdx];
+      exercise.sets.push(createSet('working', exercise.exerciseId));
       persist();
       renderActiveWorkout(pastWorkoutId);
     });
@@ -1504,6 +1926,18 @@ function renderActiveWorkout(pastWorkoutId) {
       workout.exercises.splice(exIdx, 1);
       persist();
       renderActiveWorkout(pastWorkoutId);
+    });
+  });
+
+  container.querySelectorAll('.btn-exercise-info').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      openExerciseDetail(btn.dataset.exerciseId);
+    });
+  });
+
+  container.querySelectorAll('.btn-exercise-title').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      openExerciseDetail(btn.dataset.exerciseId);
     });
   });
 
@@ -1907,10 +2341,109 @@ function formatSetSummary(ex, s) {
   return s.weight > 0 && s.reps > 0 ? `${s.weight}${session.data.preferences.units}×${s.reps}` : '';
 }
 
+// ─── Workout Calendar ───────────────────────────────────────────────────────
+
+function getWorkoutDates() {
+  const dates = new Map();
+  session.data.workouts.forEach((w) => {
+    const d = new Date(w.date);
+    d.setHours(0, 0, 0, 0);
+    const key = d.toISOString().split('T')[0];
+    if (!dates.has(key)) dates.set(key, []);
+    dates.get(key).push(w);
+  });
+  return dates;
+}
+
+function renderWorkoutCalendar() {
+  let calendarDate = new Date();
+  const container = $('history-calendar');
+  if (!container) return;
+
+  function render() {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startDay = firstDay.getDay();
+    const workoutDates = getWorkoutDates();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let html = `
+      <div class="history-calendar-header">
+        <button id="cal-prev" type="button" aria-label="Previous month">←</button>
+        <h3>${calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
+        <button id="cal-next" type="button" aria-label="Next month">→</button>
+      </div>
+    `;
+
+    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    dayLabels.forEach((d) => {
+      html += `<div class="history-calendar-day-label" aria-hidden="true">${d}</div>`;
+    });
+
+    for (let i = 0; i < startDay; i++) {
+      html += '<div class="history-calendar-day empty" aria-hidden="true"></div>';
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(year, month, day);
+      d.setHours(0, 0, 0, 0);
+      const key = d.toISOString().split('T')[0];
+      const hasWorkout = workoutDates.has(key);
+      const isToday = d.getTime() === today.getTime();
+      const classes = ['history-calendar-day', hasWorkout ? 'has-workout' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
+      if (hasWorkout) {
+        const title = `${workoutDates.get(key).length} workout${workoutDates.get(key).length > 1 ? 's' : ''}`;
+        const labelDate = new Date(`${key}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+        html += `<button type="button" class="${classes}" data-date="${key}" title="${title}" aria-label="${labelDate}: ${title}">${day}</button>`;
+      } else {
+        html += `<div class="${classes}" aria-hidden="true">${day}</div>`;
+      }
+    }
+
+    container.innerHTML = html;
+
+    $('cal-prev')?.addEventListener('click', () => {
+      calendarDate.setMonth(calendarDate.getMonth() - 1);
+      render();
+    });
+    $('cal-next')?.addEventListener('click', () => {
+      calendarDate.setMonth(calendarDate.getMonth() + 1);
+      render();
+    });
+
+    container.querySelectorAll('.history-calendar-day.has-workout').forEach((el) => {
+      el.addEventListener('click', () => {
+        const date = el.dataset.date;
+        const list = session.data.workouts.filter((w) => w.date.startsWith(date));
+        if (list.length === 0) return;
+        // Scroll to the first workout for that date in the history list below.
+        const first = document.querySelector(`[data-id="${list[0].id}"]`);
+        if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    });
+
+    container.querySelectorAll('.history-calendar-day.has-workout').forEach((el) => {
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          el.click();
+        }
+      });
+    });
+  }
+
+  render();
+}
+
 function renderHistory() {
   const container = $('history-list');
+  renderWorkoutCalendar();
   if (session.data.workouts.length === 0) {
-    container.innerHTML = '<p class="muted">No completed workouts yet.</p>';
+    container.innerHTML = '<p class="muted">No completed workouts yet—your first session is waiting for you.</p>';
     return;
   }
 
@@ -1932,15 +2465,23 @@ function renderHistory() {
         <div class="history-exercises">
           ${w.exercises
             .map(
-              (ex) => `
+              (ex) => {
+                const best1rm = getBestOneRepMax(session.data.workouts, ex.exerciseId);
+                const units = session.data.preferences.units || 'kg';
+                const exName = escapeHtml(getExercise(ex.exerciseId).name);
+                return `
             <div class="history-exercise">
-              <strong>${getExercise(ex.exerciseId).name}</strong>
-              <span>${ex.sets
-                .map((s) => formatSetSummary(ex, s))
-                .filter(Boolean)
-                .join(' • ')}</span>
+              <div class="history-exercise-main">
+                <button type="button" class="btn-exercise-title" data-exercise-id="${ex.exerciseId}" title="View details for ${exName}">${exName}</button>
+                <span>${ex.sets
+                  .map((s) => formatSetSummary(ex, s))
+                  .filter(Boolean)
+                  .join(' • ')}</span>
+              </div>
+              ${best1rm ? `<span class="history-1rm">Est. 1RM: ${Math.round(best1rm.avg)} ${units}</span>` : ''}
             </div>
-          `
+          `;
+              }
             )
             .join('')}
         </div>
@@ -1974,6 +2515,10 @@ function renderHistory() {
       renderHistory();
     });
   });
+
+  container.querySelectorAll('.history-exercise .btn-exercise-title').forEach((btn) => {
+    btn.addEventListener('click', () => openExerciseDetail(btn.dataset.exerciseId));
+  });
 }
 
 // ─── Barbell Math ───────────────────────────────────────────────────────────
@@ -1999,8 +2544,8 @@ function formatPlates(totalWeight) {
   const { plates, remaining, perSide } = calculatePlates(totalWeight);
   const units = session.data.preferences.units || 'kg';
   if (plates.length === 0) {
-    if (totalWeight <= (units === 'kg' ? 20 : 45)) return 'Empty barbell or less';
-    return 'No standard plate combination';
+    // Not useful: hide the popover when the weight is empty-barbell or un-loadable.
+    return '';
   }
   const counts = {};
   plates.forEach((p) => (counts[p] = (counts[p] || 0) + 1));
@@ -2010,6 +2555,24 @@ function formatPlates(totalWeight) {
   return `${plateStr} per side${remaining > 0.01 ? ` (remainder ${Math.round(remaining * 100) / 100}${units})` : ''}`;
 }
 
+function updateBarbellPopover(input) {
+  let popover = input.parentElement.querySelector('.barbell-popover');
+  const weight = Number(input.value);
+  const text = weight > 0 ? formatPlates(weight) : '';
+  if (!text) {
+    if (popover) popover.classList.remove('visible');
+    return;
+  }
+  if (!popover) {
+    popover = document.createElement('div');
+    popover.className = 'barbell-popover';
+    input.parentElement.style.position = 'relative';
+    input.parentElement.appendChild(popover);
+  }
+  popover.textContent = text;
+  popover.classList.add('visible');
+}
+
 function initBarbellMath(container) {
   // No-op: handled by popover below for cleaner UX.
 }
@@ -2017,27 +2580,8 @@ function initBarbellMath(container) {
 function initWeightInputPopover(container) {
   container.querySelectorAll('input.weight-input').forEach((input) => {
     if ((input.dataset.equipment || '').toLowerCase() !== 'barbell') return;
-    input.addEventListener('focus', () => {
-      let popover = input.parentElement.querySelector('.barbell-popover');
-      if (!popover) {
-        popover = document.createElement('div');
-        popover.className = 'barbell-popover';
-        input.parentElement.style.position = 'relative';
-        input.parentElement.appendChild(popover);
-      }
-      const weight = Number(input.value);
-      popover.textContent = weight > 0 ? formatPlates(weight) : 'Enter weight to see plates';
-      popover.classList.add('visible');
-    });
-
-    input.addEventListener('input', () => {
-      const popover = input.parentElement.querySelector('.barbell-popover');
-      const weight = Number(input.value);
-      if (popover) {
-        popover.textContent = weight > 0 ? formatPlates(weight) : 'Enter weight to see plates';
-      }
-    });
-
+    input.addEventListener('focus', () => updateBarbellPopover(input));
+    input.addEventListener('input', () => updateBarbellPopover(input));
     input.addEventListener('blur', () => {
       setTimeout(() => {
         const popover = input.parentElement.querySelector('.barbell-popover');
@@ -2138,7 +2682,15 @@ async function loadSync() {
     const res = await api('/sync');
     if (res.exists && res.encryptedBlob) {
       const encrypted = JSON.parse(res.encryptedBlob);
-      const data = await decryptData(encrypted, session.encKey);
+      // The KEM ciphertext is stored separately on the server.
+      if (res.kemCiphertext) encrypted.kemCiphertext = res.kemCiphertext;
+      if (!isDemoMode && !encrypted.kemCiphertext && !session.kemKeyPair) {
+        throw new Error('No KEM keypair available to decrypt sync data.');
+      }
+      // In demo mode the AES key is a CryptoKey; in real mode the KEM secret
+      // key is a Uint8Array used to recover the AES data key.
+      const key = isDemoMode ? session.encKey : session.kemKeyPair.secretKey;
+      const data = await decryptData(encrypted, key);
       session.data = { ...session.data, ...data };
       if (!session.data.plans) session.data.plans = seedPlans();
       if (!session.data.customExercises) session.data.customExercises = [];
@@ -2167,10 +2719,17 @@ async function performSync() {
   const status = $('sync-status');
   if (status) status.textContent = isDemoMode ? 'Saving demo data...' : 'Syncing encrypted state...';
   try {
-    const encrypted = await encryptData(session.data, session.encKey);
+    // Real users encrypt with their ML-KEM public key; demo users use a
+    // fixed AES key stored only in memory.
+    const encrypted = isDemoMode
+      ? await encryptData(session.data, session.encKey)
+      : await encryptData(session.data, session.kemKeyPair.publicKey);
     await api('/sync', {
       method: 'PUT',
-      body: JSON.stringify({ encryptedBlob: JSON.stringify(encrypted) }),
+      body: JSON.stringify({
+        encryptedBlob: JSON.stringify({ iv: encrypted.iv, ciphertext: encrypted.ciphertext }),
+        kemCiphertext: encrypted.kemCiphertext || 'demo-kem-ciphertext-placeholder',
+      }),
     });
     if (status) status.textContent = isDemoMode ? 'Demo data saved locally.' : 'Encrypted state synced successfully.';
   } catch (err) {

@@ -1,10 +1,17 @@
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const request = require('supertest');
+const { createHash } = require('crypto');
 const { app, pool } = require('../server');
 
+after(async () => {
+  await pool.end();
+});
+
 const TEST_USER = 'testuser';
-const TEST_AUTH_KEY = 'fake-auth-key-thirty-two-chars-' + Date.now();
+let ml_dsa65;
+let ml_kem768;
+let testKeyPair;
 
 function getCookie(res) {
   const cookies = res.headers['set-cookie'];
@@ -12,9 +19,57 @@ function getCookie(res) {
   return cookies[0].split(';')[0];
 }
 
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function solvePoW(identifier, nonce, difficulty) {
+  let solution = 0;
+  while (true) {
+    const hash = createHash('sha256').update(`${identifier}:${nonce}:${solution}`).digest('hex');
+    let bits = 0;
+    for (let i = 0; i < hash.length; i++) {
+      const n = parseInt(hash[i], 16);
+      if (n === 0) {
+        bits += 4;
+        continue;
+      }
+      const leading = 4 - Math.floor(Math.log2(n + 0.5) + 1);
+      bits += leading;
+      break;
+    }
+    if (bits >= difficulty) return solution;
+    solution++;
+  }
+}
+
+async function signNonce(nonce, secretKey) {
+  return ml_dsa65.sign(new TextEncoder().encode(nonce), secretKey);
+}
+
 describe('Auth endpoints', () => {
   before(async () => {
-    // Ensure lockout table exists and clean test user
+    const dsaMod = await import('@noble/post-quantum/ml-dsa.js');
+    const kemMod = await import('@noble/post-quantum/ml-kem.js');
+    ml_dsa65 = dsaMod.ml_dsa65;
+    ml_kem768 = kemMod.ml_kem768;
+
+    const dsaSeed = new Uint8Array(32);
+    const kemSeed = new Uint8Array(64);
+    for (let i = 0; i < 32; i++) dsaSeed[i] = i;
+    for (let i = 0; i < 64; i++) kemSeed[i] = i + 32;
+    const dsaKeyPair = ml_dsa65.keygen(dsaSeed);
+    const kemKeyPair = ml_kem768.keygen(kemSeed);
+    testKeyPair = {
+      dsaKeyPair,
+      kemKeyPair,
+      dsaPublicKey: arrayBufferToBase64(dsaKeyPair.publicKey),
+      kemPublicKey: arrayBufferToBase64(kemKeyPair.publicKey),
+    };
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS failed_login_attempts (
         username VARCHAR(32) PRIMARY KEY,
@@ -24,46 +79,80 @@ describe('Auth endpoints', () => {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    await pool.query('DELETE FROM sync_data WHERE user_id IN (SELECT id FROM users WHERE username = $1)', [TEST_USER]);
     await pool.query('DELETE FROM users WHERE username = $1', [TEST_USER]);
     await pool.query('DELETE FROM failed_login_attempts WHERE username = $1', [TEST_USER]);
   });
 
   after(async () => {
+    await pool.query('DELETE FROM sync_data WHERE user_id IN (SELECT id FROM users WHERE username = $1)', [TEST_USER]);
     await pool.query('DELETE FROM users WHERE username = $1', [TEST_USER]);
     await pool.query('DELETE FROM failed_login_attempts WHERE username = $1', [TEST_USER]);
   });
 
   it('registers a new user', async () => {
+    const challengeRes = await request(app).get('/api/auth/challenge').expect(200);
+    const solution = solvePoW(testKeyPair.dsaPublicKey, challengeRes.body.nonce, challengeRes.body.difficulty);
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ username: TEST_USER, authKeyHash: TEST_AUTH_KEY })
+      .send({
+        username: TEST_USER,
+        dsaPublicKey: testKeyPair.dsaPublicKey,
+        kemPublicKey: testKeyPair.kemPublicKey,
+        challenge: challengeRes.body.nonce,
+        solution,
+      })
       .expect(201);
     assert.equal(res.body.username, TEST_USER);
-    assert.ok(res.body.serverSalt);
     assert.ok(getCookie(res));
   });
 
   it('rejects duplicate username', async () => {
+    const challengeRes = await request(app).get('/api/auth/challenge').expect(200);
+    const solution = solvePoW(testKeyPair.dsaPublicKey, challengeRes.body.nonce, challengeRes.body.difficulty);
     await request(app)
       .post('/api/auth/register')
-      .send({ username: TEST_USER, authKeyHash: TEST_AUTH_KEY })
+      .send({
+        username: TEST_USER,
+        dsaPublicKey: testKeyPair.dsaPublicKey,
+        kemPublicKey: testKeyPair.kemPublicKey,
+        challenge: challengeRes.body.nonce,
+        solution,
+      })
       .expect(409);
   });
 
   it('logs in an existing user', async () => {
-    const res = await request(app)
+    const nonceRes = await request(app)
       .post('/api/auth/login')
-      .send({ username: TEST_USER, authKeyHash: TEST_AUTH_KEY })
+      .send({ username: TEST_USER })
       .expect(200);
-    assert.equal(res.body.username, TEST_USER);
-    assert.ok(res.body.serverSalt);
-    assert.ok(getCookie(res));
+    assert.ok(nonceRes.body.nonce);
+
+    const signature = await signNonce(nonceRes.body.nonce, testKeyPair.dsaKeyPair.secretKey);
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({
+        username: TEST_USER,
+        signature: arrayBufferToBase64(signature),
+      })
+      .expect(200);
+    assert.equal(loginRes.body.username, TEST_USER);
+    assert.ok(getCookie(loginRes));
   });
 
   it('rejects invalid credentials', async () => {
     await request(app)
       .post('/api/auth/login')
-      .send({ username: TEST_USER, authKeyHash: 'wrong-key' })
+      .send({ username: TEST_USER })
+      .expect(200);
+    const badSignature = new Uint8Array(ml_dsa65.lengths.signature).fill(0);
+    await request(app)
+      .post('/api/auth/login')
+      .send({
+        username: TEST_USER,
+        signature: arrayBufferToBase64(badSignature),
+      })
       .expect(401);
   });
 });
@@ -81,15 +170,37 @@ describe('Sync endpoints', () => {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    await pool.query('DELETE FROM sync_data WHERE user_id IN (SELECT id FROM users WHERE username = $1)', [TEST_USER]);
     await pool.query('DELETE FROM users WHERE username = $1', [TEST_USER]);
     await pool.query('DELETE FROM failed_login_attempts WHERE username = $1', [TEST_USER]);
-    const res = await request(app)
+
+    const challengeRes = await request(app).get('/api/auth/challenge').expect(200);
+    const solution = solvePoW(testKeyPair.dsaPublicKey, challengeRes.body.nonce, challengeRes.body.difficulty);
+    await request(app)
       .post('/api/auth/register')
-      .send({ username: TEST_USER, authKeyHash: TEST_AUTH_KEY });
-    cookie = getCookie(res);
+      .send({
+        username: TEST_USER,
+        dsaPublicKey: testKeyPair.dsaPublicKey,
+        kemPublicKey: testKeyPair.kemPublicKey,
+        challenge: challengeRes.body.nonce,
+        solution,
+      });
+
+    const nonceRes = await request(app)
+      .post('/api/auth/login')
+      .send({ username: TEST_USER });
+    const signature = await signNonce(nonceRes.body.nonce, testKeyPair.dsaKeyPair.secretKey);
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({
+        username: TEST_USER,
+        signature: arrayBufferToBase64(signature),
+      });
+    cookie = getCookie(loginRes);
   });
 
   after(async () => {
+    await pool.query('DELETE FROM sync_data WHERE user_id IN (SELECT id FROM users WHERE username = $1)', [TEST_USER]);
     await pool.query('DELETE FROM users WHERE username = $1', [TEST_USER]);
     await pool.query('DELETE FROM failed_login_attempts WHERE username = $1', [TEST_USER]);
   });
@@ -104,10 +215,11 @@ describe('Sync endpoints', () => {
 
   it('stores and retrieves encrypted data', async () => {
     const blob = JSON.stringify({ iv: 'abc', ciphertext: 'xyz' });
+    const kemCiphertext = 'demo-kem-ciphertext';
     await request(app)
       .put('/api/sync')
       .set('Cookie', cookie)
-      .send({ encryptedBlob: blob })
+      .send({ encryptedBlob: blob, kemCiphertext })
       .expect(200);
 
     const res = await request(app)
@@ -116,6 +228,7 @@ describe('Sync endpoints', () => {
       .expect(200);
     assert.equal(res.body.exists, true);
     assert.equal(res.body.encryptedBlob, blob);
+    assert.equal(res.body.kemCiphertext, kemCiphertext);
   });
 
   it('rejects unauthenticated sync access', async () => {

@@ -4,6 +4,8 @@
 
 A privacy-first, full-stack strength training platform built around a **Zero-Knowledge Architecture**. All exercise logs and progress metrics are encrypted client-side with AES-256-GCM before they ever touch the cloud, so your personal health data remains inaccessible to the server operator while still enabling cross-device synchronization and gamified analytics.
 
+This implementation also incorporates **NIST-standard Post-Quantum Cryptography (PQC)**. Authentication uses **ML-DSA-65** (Dilithium) signatures, and every sync uses a fresh data key encapsulated with **ML-KEM-768** (Kyber), so the system remains secure even against future cryptographically relevant quantum computers.
+
 ---
 
 ## The Problem
@@ -16,7 +18,14 @@ Traditional workout apps collect sensitive personal health metrics on centralize
 
 ## The Solution
 
-This platform flips the trust model. The server only stores **opaque, encrypted payloads**. Encryption keys are derived from the user's credentials on the client using **Argon2id** and never leave the browser. The gamification engine (XP, tonnage, progressive overload) runs entirely in the browser on decrypted local data, then re-encrypts state updates for cloud storage.
+This platform flips the trust model. The server only stores **opaque, encrypted payloads** and public keys. Keys are derived from the user's credentials on the client using **Argon2id** and never leave the browser. The gamification engine (XP, tonnage, progressive overload) runs entirely in the browser on decrypted local data, then re-encrypts state updates for cloud storage.
+
+### Post-Quantum Cryptography
+
+- **ML-DSA-65 (Dilithium)** signs a server-issued nonce during login. The server stores only the user's public key and verifies the signature without ever seeing the private key.
+- **ML-KEM-768 (Kyber)** encapsulates a per-sync AES-256-GCM data key. The server stores only the ML-KEM ciphertext; the private key remains client-side.
+- **AES-256-GCM** is used for bulk data encryption. AES-256 is already considered quantum-resistant for symmetric cryptography, so the post-quantum layer protects the key exchange and authentication paths.
+- All PQC primitives are provided by `@noble/post-quantum`, a zero-dependency, auditable JavaScript library.
 
 ## Key Features
 
@@ -43,12 +52,13 @@ This platform flips the trust model. The server only stores **opaque, encrypted 
 ## Architecture
 
 ```
-┌──────────────────────────────────────┐
+──────────────────────────────────────┐
 │           Browser (Client)           │
 │  ┌──────────────────────────────┐    │
 │  │  Argon2id key derivation     │    │
+│  │  ML-DSA / ML-KEM keypairs    │    │
 │  │  AES-256-GCM encrypt/decrypt │    │
-│  │  Gamification engine (XP,    │    │
+│  │  Gamification engine (XP,   │    │
 │  │  tonnage, progressive        │    │
 │  │  overload analytics)         │    │
 │  └──────────────────────────────┘    │
@@ -57,10 +67,11 @@ This platform flips the trust model. The server only stores **opaque, encrypted 
                ▼
 ┌──────────────────────────────────────┐
 │        Node.js / Express API         │
-│  • Stateless JWT auth                │
-│  • Stores only encrypted payloads    │
-│  • No access to plaintext keys/data  │
-└──────────────┬───────────────────────┘
+│  • PQC signature auth (ML-DSA-65)    │
+│  • Stores only public keys &         │
+│    encrypted payloads                │
+│  • No access to private keys/data      │
+└─────────────────────────────────────┘
                │
                ▼
         ┌────────────┐
@@ -76,6 +87,8 @@ This platform flips the trust model. The server only stores **opaque, encrypted 
 |-------|------------|
 | Frontend | HTML5, Vanilla JavaScript, Web Crypto API |
 | Key Derivation | Argon2id (via vendored `argon2-browser`) |
+| Post-Quantum Crypto | ML-DSA-65, ML-KEM-768 (via `@noble/post-quantum`) |
+| Symmetric Encryption | AES-256-GCM |
 | Backend | Node.js, Express, JSON Web Tokens |
 | Database | PostgreSQL 16 |
 | Container | Docker, Docker Compose |
@@ -214,6 +227,7 @@ Because the frontend and backend are on different origins, the backend sets cook
 - **Port 3000 already in use**: A previous Node process is still running. Run `npm run dev:stop`, or on Windows use `npx kill-port 3000`.
 - **CORS errors in development**: Make sure `NODE_ENV=development` is set (it is by default in `backend/.env.example`). In development, the API reflects the requesting origin.
 - **Argon2 not loading**: Ensure you ran `npm install` at the project root; this vendors `frontend/vendor/argon2.min.js`.
+- **Portfolio link broken locally**: The "Back to Portfolio" link uses `../index.html`. When you run a local dev server rooted directly in the `frontend/` directory, this link will 404. This is expected; it works correctly on the live GitHub Pages deployment where `frontend/` is a sub-folder of the site root. Serve the project root (e.g., `npx serve .` at the repository root) if you want the link to work locally.
 
 ## API Overview
 
@@ -228,18 +242,27 @@ See `backend/server.js` for request/response schemas.
 
 ## Security Model
 
-1. The server never receives the user's password.
-2. The client derives two independent keys from the password with Argon2id + HKDF:
-   - **Auth key**: used to authenticate with the API (hashed server-side).
-   - **Encryption key**: used to encrypt/decrypt the fitness payload; never transmitted.
-3. The server stores only the authentication hash and the encrypted blob.
+1. The server never receives the user's password or any private key.
+2. The client derives deterministic seeds from the password with Argon2id + HKDF, then generates the user's post-quantum keypairs:
+   - **ML-DSA-65 signing key**: used to authenticate with the API; the public key is stored server-side, the private key never leaves the browser.
+   - **ML-KEM-768 key**: used to encapsulate the per-sync AES data key; the public key is stored server-side, the private key never leaves the browser.
+3. The server stores only the public keys and the encrypted blob plus its KEM ciphertext.
 4. All transport is encrypted with TLS 1.3.
+5. The encrypted payload is opaque to the server and is never logged or inspected.
+
+### Account & Bot Controls
+
+Registration requires solving a server-issued proof-of-work challenge in the browser, which raises the cost for automated account creation. Additional protections include:
+
+- A hidden honeypot field that rejects submissions filled by bots.
+- Stricter per-IP rate limiting on registration.
+- Optional `REGISTRATION_INVITE_CODE` environment variable to restrict sign-ups on public deployments.
+- Account lockout after repeated failed login attempts.
 
 ### Known Limitations
 
-- **Deterministic salt**: the client currently derives the salt from the username. A production-grade implementation should generate a per-user random salt, store it server-side, and fetch it before deriving keys.
-- **Password-equivalent authentication**: the derived auth key is sent to the API over TLS and verified with a server-side hash. For a stricter zero-knowledge model, consider SRP or OPAQUE in the future.
 - **No offline persistence**: workout data lives in memory; closing the tab without syncing loses unsynced data. IndexedDB/offline caching is on the roadmap.
+- **One-time PQC migration**: deployments that used the earlier Argon2id `authKeyHash` scheme must re-run migrations and users must re-register. Old encrypted blobs cannot be decrypted under the new ML-KEM data keys.
 
 ## Workout Tracking Features
 

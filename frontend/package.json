@@ -1,0 +1,9 @@
+{
+  "name": "zk-fitness-frontend",
+  "version": "1.0.0",
+  "description": "ZK Fitness browser client.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

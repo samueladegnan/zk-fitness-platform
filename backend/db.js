@@ -13,6 +13,11 @@ const { Pool } = require('pg');
 require('dotenv').config();
 
 function createPool() {
+  const baseConfig = {
+    // Fail fast if Postgres is not reachable instead of hanging tests/requests.
+    connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS) || 5000,
+  };
+
   if (process.env.DATABASE_URL) {
     let url;
     try {
@@ -27,6 +32,7 @@ function createPool() {
       url.hostname === 'localhost' || url.hostname === '127.0.0.1';
 
     return new Pool({
+      ...baseConfig,
       connectionString: process.env.DATABASE_URL,
       // Managed Postgres providers (e.g. Neon) require TLS. Local/dev URLs
       // such as localhost/127.0.0.1 do not.
@@ -35,6 +41,7 @@ function createPool() {
   }
 
   return new Pool({
+    ...baseConfig,
     host: process.env.DB_HOST || 'localhost',
     port: Number(process.env.DB_PORT || 5432),
     user: process.env.DB_USER || 'fitness',

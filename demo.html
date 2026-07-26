@@ -9,27 +9,30 @@
   <link rel="stylesheet" href="./assets/css/style.css" />
 </head>
 <body>
-  <header class="page-header">
-    <nav class="site-nav" aria-label="Primary">
-      <a class="site-nav-brand" href="./index.html">ZK Fitness</a>
-      <ul class="site-nav-links">
-        <li><a href="./index.html">Overview</a></li>
-        <li><a class="active" href="./demo.html" aria-current="page">Live Demo</a></li>
-        <li><a href="./architecture.html">Architecture</a></li>
-        <li>
-          <a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform" aria-label="View source on GitHub">GitHub</a>
-        </li>
-      </ul>
-    </nav>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <nav class="site-nav" aria-label="Primary">
+    <a class="site-nav-brand" href="./index.html">ZK Fitness</a>
+    <ul class="site-nav-links">
+      <li><a href="https://samueladegnan.github.io/" target="_blank" rel="noopener noreferrer">&larr; Back to Portfolio</a></li>
+      <li><a href="./index.html">Overview</a></li>
+      <li><a class="active" href="./demo.html" aria-current="page">Live Demo</a></li>
+      <li><a href="./architecture.html">Architecture</a></li>
+      <li>
+        <a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform" aria-label="View source on GitHub">GitHub</a>
+      </li>
+      <li><a class="btn" href="./frontend/index.html">Launch Live Demo</a></li>
+    </ul>
+  </nav>
 
+  <header class="page-header">
     <h1 class="project-name">ZK Fitness</h1>
     <p class="project-tagline">Privacy-first fitness tracking with zero-knowledge encryption.</p>
     <a class="btn" href="./frontend/index.html">Launch Live Demo</a>
   </header>
 
-  <main class="main-content">
+  <main id="main-content" class="main-content">
     <h2>Live Demo</h2>
-    <p>Launch the live demo above to explore the app in your browser with no account required. Data is stored locally in your browser and never reaches a server in demo mode.</p>
+    <p>Launch the live demo above to explore the app in your browser with no account required. Data is stored locally in your browser and never reaches a server in demo mode. The live (non-demo) app uses ML-DSA-65 and ML-KEM-768 for post-quantum authentication and key encapsulation.</p>
 
     <h2>Run It Locally</h2>
     <p>To run the project manually on your own machine, use the following commands:</p>
@@ -62,7 +65,17 @@ npx serve .</code></pre>
   </main>
 
   <footer class="site-footer">
-    <span class="site-footer-credits">Built by <a href="https://github.com/samueladegnan">Samuel Degnan</a>.</span>
+    <div class="site-footer__inner">
+      <p class="site-footer__tagline">Privacy-first strength &amp; cardio tracking with client-side encryption.</p>
+      <p class="site-footer__links">
+        <a href="https://samueladegnan.github.io/">Portfolio</a>
+        <span aria-hidden="true">&bull;</span>
+        <a href="https://github.com/samueladegnan/zk-fitness-platform">GitHub</a>
+        <span aria-hidden="true">&bull;</span>
+        <a href="./frontend/index.html">Live Demo</a>
+      </p>
+      <p class="site-footer__copyright">&copy; 2026 <a href="https://github.com/samueladegnan">Samuel Degnan</a></p>
+    </div>
   </footer>
 </body>
 </html>

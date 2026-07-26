@@ -59,6 +59,19 @@ jobs:
           JWT_SECRET: ci-test-secret
         run: npm test
 
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run frontend unit tests
+        run: npm run test:frontend
+
   docker:
     runs-on: ubuntu-latest
     steps:

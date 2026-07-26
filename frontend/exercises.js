@@ -52,6 +52,8 @@ function getExerciseById(id) {
   return EXERCISE_CATALOG.find((ex) => ex.id === id);
 }
 
+export { EXERCISE_CATALOG, getExerciseById, searchExercises, getExercisesByCategory, CATEGORIES };
+
 function searchExercises(query, catalog = EXERCISE_CATALOG) {
   const q = query.toLowerCase().trim();
   if (!q) return catalog;
@@ -119,3 +121,4 @@ function getExercisesByCategory(category) {
 }
 
 const CATEGORIES = ['All', ...new Set(EXERCISE_CATALOG.map((ex) => ex.category))];
+

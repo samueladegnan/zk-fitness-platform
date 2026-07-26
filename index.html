@@ -9,25 +9,27 @@
   <link rel="stylesheet" href="./assets/css/style.css" />
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <nav class="site-nav" aria-label="Primary">
+    <a class="site-nav-brand" href="./index.html">ZK Fitness</a>
+    <ul class="site-nav-links">
+      <li><a href="https://samueladegnan.github.io/" target="_blank" rel="noopener noreferrer">&larr; Back to Portfolio</a></li>
+      <li><a class="active" href="./index.html" aria-current="page">Overview</a></li>
+      <li><a href="./demo.html">Live Demo</a></li>
+      <li><a href="./architecture.html">Architecture</a></li>
+      <li>
+        <a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform" aria-label="View source on GitHub">GitHub</a>
+      </li>
+      <li><a class="btn" href="./frontend/index.html">Launch Live Demo</a></li>
+    </ul>
+  </nav>
   <header class="page-header">
-    <nav class="site-nav" aria-label="Primary">
-      <a class="site-nav-brand" href="./index.html">ZK Fitness</a>
-      <ul class="site-nav-links">
-        <li><a class="active" href="./index.html" aria-current="page">Overview</a></li>
-        <li><a href="./demo.html">Live Demo</a></li>
-        <li><a href="./architecture.html">Architecture</a></li>
-        <li>
-          <a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform" aria-label="View source on GitHub">GitHub</a>
-        </li>
-      </ul>
-    </nav>
-
     <h1 class="project-name">ZK Fitness</h1>
     <p class="project-tagline">Privacy-first fitness tracking with zero-knowledge encryption.</p>
     <a class="btn" href="./frontend/index.html">Launch Live Demo</a>
   </header>
 
-  <main class="main-content">
+  <main id="main-content" class="main-content">
     <p>
       <a href="https://github.com/samueladegnan/zk-fitness-platform/actions/workflows/ci.yml"><img src="https://github.com/samueladegnan/zk-fitness-platform/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
       <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-18%2B-green.svg" alt="Node 18+" /></a>
@@ -39,10 +41,12 @@
 
     <h2>How It Works</h2>
     <p>Using the Web Crypto API, all data is encrypted directly in your browser with AES-256-GCM before it touches the network. The backend server only stores opaque blobs it cannot decrypt. Key derivation is handled by Argon2id, providing strong protection against brute-force attacks.</p>
+    <p>Authentication is performed with <strong>ML-DSA-65 (Dilithium)</strong> signatures, and each sync wraps a fresh AES data key using <strong>ML-KEM-768 (Kyber)</strong>. These NIST-standard post-quantum algorithms protect the platform against future cryptographically relevant quantum computers.</p>
 
     <h2>Key Features</h2>
     <ul>
       <li><strong>Zero-Knowledge Architecture:</strong> End-to-end client-side encryption means the server has zero visibility into your personal health data.</li>
+      <li><strong>Post-Quantum Cryptography:</strong> ML-DSA-65 authentication and ML-KEM-768 key encapsulation keep data secure against quantum attacks.</li>
       <li><strong>Strength &amp; Cardio Tracking:</strong> Log weight and reps for lifting, or distance, duration, heart rate, and calories for running, cycling, swimming, and more.</li>
       <li><strong>Gamified Progress:</strong> Earn XP, level up, unlock badges, and track active streaks.</li>
       <li><strong>Smart Rest Timer:</strong> Configurable rest timers with +/- 30s quick controls, audio alerts, and warmup set generation.</li>
@@ -55,7 +59,17 @@
   </main>
 
   <footer class="site-footer">
-    <span class="site-footer-credits">Built by <a href="https://github.com/samueladegnan">Samuel Degnan</a>.</span>
+    <div class="site-footer__inner">
+      <p class="site-footer__tagline">Privacy-first strength &amp; cardio tracking with client-side encryption.</p>
+      <p class="site-footer__links">
+        <a href="https://samueladegnan.github.io/">Portfolio</a>
+        <span aria-hidden="true">&bull;</span>
+        <a href="https://github.com/samueladegnan/zk-fitness-platform">GitHub</a>
+        <span aria-hidden="true">&bull;</span>
+        <a href="./frontend/index.html">Live Demo</a>
+      </p>
+      <p class="site-footer__copyright">&copy; 2026 <a href="https://github.com/samueladegnan">Samuel Degnan</a></p>
+    </div>
   </footer>
 </body>
 </html>
