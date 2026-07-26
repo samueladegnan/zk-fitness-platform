@@ -89,8 +89,8 @@ describe('formatOneRm', () => {
   });
 
   it('returns a dash for null or NaN', () => {
-    assert.strictEqual(formatOneRm(null, 'kg'), '—');
-    assert.strictEqual(formatOneRm(Number.NaN, 'kg'), '—');
+    assert.strictEqual(formatOneRm(null, 'kg'), '-');
+    assert.strictEqual(formatOneRm(Number.NaN, 'kg'), '-');
   });
 });
 

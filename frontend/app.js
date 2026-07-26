@@ -874,7 +874,7 @@ function initAuthUI() {
     }
 
     const actionText = isRegisterMode ? 'Creating your account' : 'Logging you in';
-    showLoadingModal(`${actionText} — the post-quantum crypto setup can take a few seconds the first time. Please wait.`);
+    showLoadingModal(`${actionText} - the post-quantum crypto setup can take a few seconds the first time. Please wait.`);
 
     try {
       await performPasswordAuth(username, password, inviteCode);
@@ -1052,7 +1052,7 @@ function renderDashboard() {
   tbody.innerHTML = '';
   if (recent.length === 0) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="5" class="muted">No workouts yet—pick a plan and get moving!</td>`;
+    tr.innerHTML = `<td colspan="5" class="muted">No workouts yet-pick a plan and get moving!</td>`;
     tbody.appendChild(tr);
   } else {
     recent.forEach((w) => {
@@ -1187,24 +1187,24 @@ function openExerciseDetail(exerciseId) {
           ${isCardio ? `
             <div class="exercise-record-card">
               <span class="label">Max Distance</span>
-              <span class="value">${records ? records.distance : '—'} ${units}</span>
+              <span class="value">${records ? records.distance : '-'} ${units}</span>
             </div>
             <div class="exercise-record-card">
               <span class="label">Max Duration</span>
-              <span class="value">${records ? `${records.duration} min` : '—'}</span>
+              <span class="value">${records ? `${records.duration} min` : '-'}</span>
             </div>
           ` : `
             <div class="exercise-record-card">
               <span class="label">Max Weight</span>
-              <span class="value">${records ? `${records.maxWeight} ${units}` : '—'}</span>
+              <span class="value">${records ? `${records.maxWeight} ${units}` : '-'}</span>
             </div>
             <div class="exercise-record-card">
               <span class="label">Max Reps</span>
-              <span class="value">${records ? records.maxReps : '—'}</span>
+              <span class="value">${records ? records.maxReps : '-'}</span>
             </div>
             <div class="exercise-record-card">
               <span class="label">Best Est. 1RM</span>
-              <span class="value">${best1rm ? `${best1rm} ${units}` : '—'}</span>
+              <span class="value">${best1rm ? `${best1rm} ${units}` : '-'}</span>
             </div>
           `}
         </div>
@@ -1228,7 +1228,7 @@ function openExerciseDetail(exerciseId) {
             <input id="detail-1rm-reps" type="number" step="1" min="1" value="" />
           </div>
           <div class="exercise-detail-1rm-result">
-            <strong id="detail-1rm-result">—</strong>
+            <strong id="detail-1rm-result">-</strong>
             <span>Estimated 1RM</span>
           </div>
         </div>
@@ -1246,16 +1246,16 @@ function openExerciseDetail(exerciseId) {
                 <tr>
                   <td>${new Date(h.date).toLocaleDateString()}</td>
                   <td>${escapeHtml(h.workoutName)}</td>
-                  <td>${h.distance > 0 ? `${h.distance} ${units}` : '—'}</td>
-                  <td>${h.durationMinutes > 0 ? `${h.durationMinutes} min` : '—'}</td>
+                  <td>${h.distance > 0 ? `${h.distance} ${units}` : '-'}</td>
+                  <td>${h.durationMinutes > 0 ? `${h.durationMinutes} min` : '-'}</td>
                 </tr>
               ` : `
                 <tr>
                   <td>${new Date(h.date).toLocaleDateString()}</td>
                   <td>${escapeHtml(h.workoutName)}</td>
-                  <td>${h.weight > 0 ? `${h.weight} ${units}` : '—'}</td>
-                  <td>${h.reps > 0 ? h.reps : '—'}</td>
-                  <td>${h.oneRm > 0 ? Math.round(h.oneRm) : '—'}</td>
+                  <td>${h.weight > 0 ? `${h.weight} ${units}` : '-'}</td>
+                  <td>${h.reps > 0 ? h.reps : '-'}</td>
+                  <td>${h.oneRm > 0 ? Math.round(h.oneRm) : '-'}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -2443,7 +2443,7 @@ function renderHistory() {
   const container = $('history-list');
   renderWorkoutCalendar();
   if (session.data.workouts.length === 0) {
-    container.innerHTML = '<p class="muted">No completed workouts yet—your first session is waiting for you.</p>';
+    container.innerHTML = '<p class="muted">No completed workouts yet-your first session is waiting for you.</p>';
     return;
   }
 

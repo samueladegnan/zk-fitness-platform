@@ -15,7 +15,7 @@ function calculateOneRepMax(weight, reps) {
 }
 
 function formatOneRm(value, units) {
-  if (value === null || Number.isNaN(value)) return '—';
+  if (value === null || Number.isNaN(value)) return '-';
   return `${Math.round(value)} ${units}`;
 }
 
