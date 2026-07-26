@@ -42,25 +42,25 @@ a:hover {
   text-align: center;
   background-color: #159957;
   background-image: linear-gradient(120deg, #155799, #159957);
-  padding: 0 0 4rem;
+  padding: 0 0 2.5rem;
   position: relative;
 }
 
 @media screen and (min-width: 42em) {
   .page-header {
-    padding: 0 0 4rem;
+    padding: 0 0 2.5rem;
   }
 }
 
 @media screen and (min-width: 64em) {
   .page-header {
-    padding: 0 0 4.5rem;
+    padding: 0 0 3rem;
   }
 }
 
 .project-name {
   margin-top: 0;
-  padding-top: 0.75rem;
+  padding-top: 0.5rem;
   margin-bottom: 0.25rem;
   font-size: 2rem;
   font-weight: 700;
