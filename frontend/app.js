@@ -15,9 +15,6 @@ import {
   xpForSet,
   xpForWorkout,
   totalTonnage,
-  totalCardioDistance,
-  totalCardioCalories,
-  totalCardioDuration,
   computeStats,
   getLevel,
   xpToNextLevel,
@@ -31,6 +28,7 @@ import {
   getBestOneRepMax,
 } from './lib/fitness.js';
 import { getExerciseById, EXERCISE_CATALOG } from './exercises.js';
+import { saveLocalData, loadLocalData, clearLocalData } from './lib/db.js';
 
 // API_BASE can be overridden for production by setting window.ZK_API_BASE
 // (e.g. via an inline <script> in index.html or a CI build step).
@@ -53,12 +51,15 @@ let session = {
     workouts: [],
     customExercises: [],
     preferences: { defaultRestSeconds: 90, units: 'kg' },
+    updatedAt: 0,
   },
 };
 
 let isRegisterMode = true;
 let isAuthenticated = false;
 let isDemoMode = false;
+let billingEnabled = false;
+let subscription = { status: 'inactive', type: null, isPaid: false };
 let globalTimerInterval = null;
 let restTimerInterval = null;
 let restEndTime = 0;
@@ -304,7 +305,14 @@ async function api(path, options = {}) {
   } catch {
     body = {};
   }
-  if (!res.ok) throw new Error(body.error || `Server error (${res.status})`);
+  if (!res.ok) {
+    if (body.code === 'SUBSCRIPTION_REQUIRED') {
+      const err = new Error(body.error);
+      err.code = 'SUBSCRIPTION_REQUIRED';
+      throw err;
+    }
+    throw new Error(body.error || `Server error (${res.status})`);
+  }
   markApiSuccess();
   return body;
 }
@@ -313,14 +321,12 @@ async function demoApi(path, options) {
   await new Promise((r) => setTimeout(r, 30)); // Simulate network latency
   const method = options.method || 'GET';
   if (path === '/sync' && method === 'GET') {
-    const stored = localStorage.getItem(DEMO_STORAGE_KEY);
-    const kemCiphertext = localStorage.getItem(`${DEMO_STORAGE_KEY}_kem`) || '';
-    return { exists: !!stored, encryptedBlob: stored, kemCiphertext };
+    const local = await loadLocalData('demo');
+    return local || { exists: false, encryptedBlob: null, kemCiphertext: '' };
   }
   if (path === '/sync' && method === 'PUT') {
     const body = JSON.parse(options.body);
-    localStorage.setItem(DEMO_STORAGE_KEY, body.encryptedBlob);
-    if (body.kemCiphertext) localStorage.setItem(`${DEMO_STORAGE_KEY}_kem`, body.kemCiphertext);
+    await saveLocalData('demo', body.encryptedBlob, body.kemCiphertext || '');
     return { message: 'Demo sync stored' };
   }
   if (path === '/auth/challenge') {
@@ -782,6 +788,7 @@ async function performPasswordAuth(username, password, inviteCode) {
 
   isAuthenticated = true;
   renderNav();
+  await loadSubscriptionStatus();
   await loadSync();
   showView('dashboard-view');
   renderDashboard();
@@ -913,10 +920,26 @@ function initAuthUI() {
   }
 }
 
+async function loadSubscriptionStatus() {
+  try {
+    const status = await api('/billing/status');
+    subscription = {
+      status: status.status || 'inactive',
+      type: status.type || null,
+      isPaid: Boolean(status.isPaid),
+    };
+    billingEnabled = Boolean(status.billingEnabled);
+  } catch (err) {
+    console.error('Failed to load subscription status:', err);
+    subscription = { status: 'inactive', type: null, isPaid: false };
+    billingEnabled = false;
+  }
+}
+
 async function startDemoMode() {
   try {
     isDemoMode = true;
-    session.username = 'Demo User';
+    session.username = 'demo';
     session.token = 'demo-token';
     session.encKey = await getDemoEncKey();
     session.salt = new Uint8Array(32);
@@ -946,6 +969,26 @@ function showView(viewId) {
   document.querySelectorAll('.view').forEach((el) => el.classList.add('hidden'));
   $(viewId).classList.remove('hidden');
   updateActiveWorkoutBanner();
+  updateActiveNavItem(viewId);
+}
+
+function updateActiveNavItem(viewId) {
+  const nav = $('nav');
+  if (!nav) return;
+  const map = {
+    'dashboard-view': 'nav-dashboard',
+    'plans-view': 'nav-plans',
+    'history-view': 'nav-history',
+    'exercises-view': 'nav-exercises',
+    'workout-view': null,
+    'plan-editor-view': 'nav-plans',
+  };
+  nav.querySelectorAll('button.link').forEach((btn) => btn.removeAttribute('aria-current'));
+  const activeId = map[viewId];
+  if (activeId) {
+    const activeBtn = $(activeId);
+    if (activeBtn) activeBtn.setAttribute('aria-current', 'page');
+  }
 }
 
 function renderNav() {
@@ -955,12 +998,13 @@ function renderNav() {
     return;
   }
   nav.innerHTML = `
-    <button class="link" id="nav-dashboard">Dashboard</button>
+    <button class="link" id="nav-dashboard" aria-current="page">Dashboard</button>
     <button class="link" id="nav-plans">Plans</button>
     <button class="link" id="nav-history">History</button>
     <button class="link" id="nav-exercises">Exercises</button>
     <button class="link" id="nav-logout">Log out</button>
   `;
+  updateActiveNavItem('dashboard-view');
   $('nav-dashboard').addEventListener('click', () => { showView('dashboard-view'); renderDashboard(); });
   $('nav-plans').addEventListener('click', () => { showView('plans-view'); renderPlans(); });
   $('nav-history').addEventListener('click', () => { showView('history-view'); renderHistory(); });
@@ -974,6 +1018,11 @@ async function logout() {
   } catch (err) {
     console.error('Logout API call failed:', err);
   }
+  try {
+    await clearLocalData(session.username || 'demo');
+  } catch (err) {
+    console.error('Local data clear failed:', err);
+  }
   session = {
     username: null,
     token: null,
@@ -986,12 +1035,15 @@ async function logout() {
       workouts: [],
       customExercises: [],
       preferences: { defaultRestSeconds: 90, units: 'kg' },
+      updatedAt: 0,
     },
   };
   stopGlobalTimer();
   clearInterval(restTimerInterval);
   isAuthenticated = false;
   isDemoMode = false;
+  billingEnabled = false;
+  subscription = { status: 'inactive', type: null, isPaid: false };
   renderNav();
   showView('auth-view');
   $('auth-error').textContent = 'You have been logged out.';
@@ -1003,7 +1055,39 @@ function renderDashboard() {
     startEmptyBtn.onclick = () => startEmptyWorkout();
   }
 
-  const stats = computeStats(session.data.workouts);
+  // Render subscription card if billing is enabled.
+  const dashboardMain = $('dashboard-view');
+  let subCard = $('subscription-card');
+  if (!subCard && dashboardMain && billingEnabled) {
+    subCard = document.createElement('div');
+    subCard.id = 'subscription-card';
+    subCard.className = 'panel subscription-card';
+    dashboardMain.insertBefore(subCard, dashboardMain.children[1]);
+  }
+  if (subCard) {
+    const isPaid = subscription.isPaid;
+    const statusText = isPaid
+      ? `Active (${subscription.type === 'lifetime' ? 'Lifetime' : 'Subscription'})`
+      : 'Free (local only)';
+    subCard.innerHTML = `
+      <h2>Subscription</h2>
+      <p class="subscription-status">${statusText}</p>
+      <p class="muted small">${isPaid
+        ? 'Cloud sync across devices is active.'
+        : 'All workout features are free locally. Upgrade to sync across devices.'}</p>
+      <div class="subscription-actions">
+        ${isPaid
+          ? `<button id="manage-subscription" class="secondary">Manage Billing</button>`
+          : `<button id="subscribe-btn" class="btn-start">Upgrade</button>`}
+      </div>
+    `;
+    const manageBtn = $('manage-subscription');
+    const subscribeBtn = $('subscribe-btn');
+    if (manageBtn) manageBtn.onclick = openBillingPortal;
+    if (subscribeBtn) subscribeBtn.onclick = openPricingModal;
+  }
+
+  const stats = computeStats(session.data.workouts, isCardioExercise, session.data.preferences.units);
   const level = getLevel(stats.totalXp);
   const xpInfo = xpToNextLevel(stats.totalXp);
   const badges = computeBadges(stats);
@@ -1066,6 +1150,85 @@ function renderDashboard() {
     });
   }
 
+}
+
+// ─── Subscription / Billing ───────────────────────────────────────────────
+
+function openPricingModal() {
+  const modal = $('app-modal');
+  const titleEl = $('app-modal-title');
+  const messageEl = $('app-modal-message');
+  const confirmBtn = $('app-modal-confirm');
+  const cancelBtn = $('app-modal-cancel');
+  const inputWrapper = $('app-modal-input-wrapper');
+
+  if (inputWrapper) inputWrapper.classList.add('hidden');
+  if (titleEl) titleEl.textContent = 'Upgrade ZK Fitness';
+  if (messageEl) {
+    messageEl.innerHTML = `
+      <p>The app is free to use locally. Pay only for encrypted cloud sync across your phone, laptop, and tablet.</p>
+      <div class="pricing-options">
+        <button class="pricing-card" data-type="monthly">
+          <strong>$3.99 / month</strong>
+          <span>Cancel anytime</span>
+        </button>
+        <button class="pricing-card" data-type="yearly">
+          <strong>$29.99 / year</strong>
+          <span>Save 37%</span>
+        </button>
+        <button class="pricing-card" data-type="lifetime">
+          <strong>$79.99 once</strong>
+          <span>Permanent access</span>
+        </button>
+      </div>
+      <p class="muted small">Payments are processed securely by Stripe. No ads, ever.</p>
+    `;
+  }
+  if (confirmBtn) {
+    confirmBtn.textContent = 'Choose Plan';
+    confirmBtn.disabled = true;
+  }
+  if (cancelBtn) cancelBtn.textContent = 'Maybe Later';
+
+  let selectedType = null;
+  modal.querySelectorAll('.pricing-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      modal.querySelectorAll('.pricing-card').forEach((c) => c.classList.remove('selected'));
+      card.classList.add('selected');
+      selectedType = card.dataset.type;
+      confirmBtn.disabled = false;
+    });
+  });
+
+  confirmBtn.onclick = async () => {
+    if (!selectedType) return;
+    modal.classList.add('hidden');
+    await startCheckout(selectedType);
+  };
+  cancelBtn.onclick = () => modal.classList.add('hidden');
+
+  modal.classList.remove('hidden');
+}
+
+async function startCheckout(priceType) {
+  try {
+    const res = await api('/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ priceType }),
+    });
+    window.location.href = res.url;
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function openBillingPortal() {
+  try {
+    const res = await api('/billing/portal', { method: 'POST' });
+    window.location.href = res.url;
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 // ─── Exercise Detail ────────────────────────────────────────────────────────
@@ -1366,7 +1529,7 @@ function renderPlans() {
           <span class="plan-meta">${plan.exercises.length} exercises</span>
         </div>
         <ul class="plan-exercises">
-          ${plan.exercises.map((e) => `<li>${getExercise(e.exerciseId).name} - ${e.targetSets}x${e.targetReps}</li>`).join('')}
+          ${plan.exercises.map((e) => `<li class="plan-exercise-item" data-exercise-id="${e.exerciseId}" role="button" tabindex="0" aria-label="View details for ${escapeHtml(getExercise(e.exerciseId).name)}">${escapeHtml(getExercise(e.exerciseId).name)} - ${e.targetSets}x${e.targetReps}</li>`).join('')}
         </ul>
         <div class="plan-actions">
           <button class="btn-start" data-id="${plan.id}">Start Workout</button>
@@ -1387,6 +1550,17 @@ function renderPlans() {
   list.querySelectorAll('.btn-delete-plan').forEach((btn) =>
     btn.addEventListener('click', () => deletePlan(btn.dataset.id))
   );
+
+  list.querySelectorAll('.plan-exercise-item').forEach((item) => {
+    const open = () => openExerciseDetail(item.dataset.exerciseId);
+    item.addEventListener('click', open);
+    item.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        open();
+      }
+    });
+  });
 
   const createBtn = $('create-plan-btn');
   if (createBtn) {
@@ -2682,35 +2856,79 @@ function fireConfetti() {
 // ─── Sync ───────────────────────────────────────────────────────────────────
 
 async function loadSync() {
+  const status = $('sync-status');
+  let localData = null;
+  let cloudData = null;
+
+  // Load the encrypted local copy first so the user always sees their latest
+  // state, even when offline.
+  try {
+    const local = await loadLocalData(session.username || 'demo');
+    if (local && local.encryptedBlob) {
+      const encrypted = JSON.parse(local.encryptedBlob);
+      if (local.kemCiphertext) encrypted.kemCiphertext = local.kemCiphertext;
+      const key = isDemoMode ? session.encKey : session.kemKeyPair.secretKey;
+      localData = await decryptData(encrypted, key);
+    }
+  } catch (localErr) {
+    console.error('Failed to load local sync data:', localErr);
+  }
+
+  // Then attempt to refresh from the cloud.
   try {
     const res = await api('/sync');
     if (res.exists && res.encryptedBlob) {
       const encrypted = JSON.parse(res.encryptedBlob);
-      // The KEM ciphertext is stored separately on the server.
       if (res.kemCiphertext) encrypted.kemCiphertext = res.kemCiphertext;
       if (!isDemoMode && !encrypted.kemCiphertext && !session.kemKeyPair) {
         throw new Error('No KEM keypair available to decrypt sync data.');
       }
-      // In demo mode the AES key is a CryptoKey; in real mode the KEM secret
-      // key is a Uint8Array used to recover the AES data key.
       const key = isDemoMode ? session.encKey : session.kemKeyPair.secretKey;
-      const data = await decryptData(encrypted, key);
-      session.data = { ...session.data, ...data };
-      if (!session.data.plans) session.data.plans = seedPlans();
-      if (!session.data.customExercises) session.data.customExercises = [];
-      if (!session.data.preferences) session.data.preferences = { defaultRestSeconds: 90, units: 'kg' };
-      if (getActiveWorkout()) startGlobalTimer();
-      if ($('sync-status')) $('sync-status').textContent = isDemoMode ? 'Demo data loaded from localStorage.' : 'Loaded latest encrypted state from cloud.';
-    } else {
-      session.data.plans = seedPlans();
-      if ($('sync-status')) $('sync-status').textContent = isDemoMode ? 'Starting fresh demo.' : 'No prior sync found. Starting fresh.';
+      cloudData = await decryptData(encrypted, key);
+      // Keep the local copy in sync without re-encrypting.
+      await saveLocalData(session.username || 'demo', res.encryptedBlob, res.kemCiphertext || '');
     }
   } catch (err) {
     reportApiError(err, (failure) => {
-      if ($('sync-status')) $('sync-status').textContent = `Sync load failed: ${failure.message}`;
-      showToast(`Sync load failed: ${failure.message}`, 'error');
+      if (status) status.textContent = localData ? 'Cloud sync unavailable. Working from local copy.' : 'Cloud sync unavailable.';
     });
   }
+
+  // Choose the most recently updated copy. Fallback order: local > cloud > fresh.
+  if (localData && cloudData) {
+    const localTime = localData.updatedAt || 0;
+    const cloudTime = cloudData.updatedAt || 0;
+    if (cloudTime >= localTime) {
+      session.data = { ...session.data, ...cloudData };
+      if (status) status.textContent = 'Encrypted state synced from cloud.';
+    } else {
+      session.data = { ...session.data, ...localData };
+      if (status) status.textContent = 'Loaded encrypted state from local storage.';
+    }
+  } else if (localData) {
+    session.data = { ...session.data, ...localData };
+    if (status) status.textContent = 'Loaded encrypted state from local storage.';
+  } else if (cloudData) {
+    session.data = { ...session.data, ...cloudData };
+    if (status) status.textContent = 'Encrypted state synced from cloud.';
+  }
+
+  if (!session.data.plans) session.data.plans = seedPlans();
+  if (!session.data.customExercises) session.data.customExercises = [];
+  if (!session.data.preferences) session.data.preferences = { defaultRestSeconds: 90, units: 'kg' };
+  if (getActiveWorkout()) startGlobalTimer();
+
+  if (!localData && !cloudData) {
+    if (status) status.textContent = isDemoMode ? 'Starting fresh demo.' : 'No prior sync found. Starting fresh.';
+  }
+}
+
+async function persistEncryptedLocal() {
+  session.data.updatedAt = Date.now();
+  const encrypted = isDemoMode
+    ? await encryptData(session.data, session.encKey)
+    : await encryptData(session.data, session.kemKeyPair.publicKey);
+  await saveLocalData(session.username || 'demo', JSON.stringify({ iv: encrypted.iv, ciphertext: encrypted.ciphertext }), encrypted.kemCiphertext || 'demo-kem-ciphertext-placeholder');
 }
 
 function scheduleSync() {
@@ -2722,9 +2940,24 @@ async function performSync() {
   syncTimeout = null;
   const status = $('sync-status');
   if (status) status.textContent = isDemoMode ? 'Saving demo data...' : 'Syncing encrypted state...';
+
   try {
-    // Real users encrypt with their ML-KEM public key; demo users use a
-    // fixed AES key stored only in memory.
+    // Always keep an encrypted local copy first.
+    await persistEncryptedLocal();
+    if (status) status.textContent = isDemoMode ? 'Demo data saved locally.' : 'Encrypted state saved locally.';
+  } catch (localErr) {
+    if (status) status.textContent = 'Local save failed.';
+    showToast('Failed to save data locally.', 'error');
+    return;
+  }
+
+  // Attempt cloud sync when the network is available.
+  if (!navigator.onLine) {
+    if (status) status.textContent = isDemoMode ? 'Demo data saved locally.' : 'Offline. Encrypted state saved locally; will sync when online.';
+    return;
+  }
+
+  try {
     const encrypted = isDemoMode
       ? await encryptData(session.data, session.encKey)
       : await encryptData(session.data, session.kemKeyPair.publicKey);
@@ -2738,7 +2971,7 @@ async function performSync() {
     if (status) status.textContent = isDemoMode ? 'Demo data saved locally.' : 'Encrypted state synced successfully.';
   } catch (err) {
     reportApiError(err, (failure) => {
-      if (status) status.textContent = `Sync failed: ${failure.message}`;
+      if (status) status.textContent = `Sync failed: ${failure.message}. Saved locally for now.`;
       showToast(`Sync failed: ${failure.message}`, 'error');
     });
   }
@@ -2752,6 +2985,13 @@ async function syncDataImmediate() {
   if (syncTimeout) clearTimeout(syncTimeout);
   await performSync();
 }
+
+// Retry cloud sync whenever the browser comes back online.
+window.addEventListener('online', () => {
+  if (isAuthenticated) {
+    syncDataImmediate().catch((err) => console.error('Online sync retry failed:', err));
+  }
+});
 
 // ─── Bootstrap ──────────────────────────────────────────────────────────────
 async function bootstrap() {

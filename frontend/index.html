@@ -5,11 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ZK Fitness - Zero-Knowledge Workout Tracker</title>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="stylesheet" href="styles.css" />
   <script src="config.js"></script>
   <script type="module" src="app.js"></script>
   <script defer src="vendor/argon2.min.js"></script>
   <script defer src="vendor/noble-pqc.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch((err) => {
+          console.error('Service worker registration failed:', err);
+        });
+      });
+    }
+  </script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
@@ -24,7 +36,7 @@
         <span id="active-workout-timer">0:00</span>
         <button id="resume-workout-btn" class="small">Resume</button>
       </div>
-      <nav class="app-nav" id="nav"></nav>
+      <nav class="app-nav" id="nav" aria-label="Main navigation"></nav>
       <a href="../" class="back-to-portfolio">← Portfolio</a>
       <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark mode">🌙</button>
     </header>
@@ -91,7 +103,7 @@
             <span class="stat-value" id="stat-distance">0</span>
           </div>
           <div class="stat-card cardio-stat">
-            <span class="stat-label">Calories</span>
+            <span class="stat-label">Est. Calories</span>
             <span class="stat-value" id="stat-calories">0</span>
           </div>
         </div>
@@ -227,15 +239,13 @@
     </div>
 
     <footer class="app-footer">
-      <p class="app-footer__tagline">Privacy-first strength and cardio tracking. Your data stays in your browser.</p>
+      <p class="app-footer__tagline">Privacy-first strength &amp; cardio tracking with client-side encryption.</p>
       <p class="app-footer__links">
         <a href="https://samueladegnan.github.io/">Portfolio</a>
         <span aria-hidden="true">&bull;</span>
         <a href="https://github.com/samueladegnan/zk-fitness-platform">GitHub</a>
-        <span aria-hidden="true">&bull;</span>
-        <a href="../">Project Home</a>
       </p>
-      <p class="app-footer__copyright">&copy; 2026 Samuel Degnan</p>
+      <p class="app-footer__copyright">&copy; 2026 <a href="https://github.com/samueladegnan">Samuel Degnan</a></p>
     </footer>
   </div>
 </body>

@@ -14,10 +14,8 @@ import {
   xpForSet,
   xpForWorkout,
   totalTonnage,
-  totalCardioDistance,
-  totalCardioCalories,
-  totalCardioDuration,
   computeStats,
+  getCaloriesForSet,
   getLevel,
   xpToNextLevel,
   getPR,
@@ -131,19 +129,21 @@ describe('totalTonnage', () => {
   });
 });
 
-describe('cardio totals', () => {
-  const sets = [cardioSet(5, 30, 300), cardioSet(3, 20, 150)];
-
-  it('sums distance', () => {
-    assert.strictEqual(totalCardioDistance(sets), 8);
+describe('getCaloriesForSet', () => {
+  it('estimates strength calories from weight and reps', () => {
+    const kcal = getCaloriesForSet(strengthSet(100, 10), false, 'kg');
+    assert.strictEqual(kcal, 100 * 10 * 0.015);
   });
 
-  it('sums calories', () => {
-    assert.strictEqual(totalCardioCalories(sets), 450);
+  it('uses user-entered calories for cardio', () => {
+    const kcal = getCaloriesForSet(cardioSet(5, 30, 300), true, 'kg');
+    assert.strictEqual(kcal, 300);
   });
 
-  it('sums duration', () => {
-    assert.strictEqual(totalCardioDuration(sets), 50);
+  it('converts lbs to kg for strength estimates', () => {
+    const kcalKg = getCaloriesForSet(strengthSet(100, 10), false, 'kg');
+    const kcalLbs = getCaloriesForSet(strengthSet(220.462, 10), false, 'lbs');
+    assert.ok(Math.abs(kcalKg - kcalLbs) < 0.001);
   });
 });
 
@@ -166,16 +166,18 @@ describe('computeStats', () => {
   ];
 
   it('totals XP, tonnage, workouts, distance, and calories', () => {
-    const stats = computeStats(workouts);
+    const isCardio = (id) => id === 'running';
+    const stats = computeStats(workouts, isCardio, 'kg');
     assert.strictEqual(stats.totalXp, 150);
     assert.strictEqual(stats.workouts, 2);
     assert.strictEqual(stats.tonnage, 100 * 5 + 120 * 5);
     assert.strictEqual(stats.distance, 5);
-    assert.strictEqual(stats.calories, 300);
+    const expectedStrengthKcal = (100 * 5 + 120 * 5) * 0.015;
+    assert.strictEqual(stats.calories, 300 + expectedStrengthKcal);
   });
 
   it('returns zeroed stats for no workouts', () => {
-    const stats = computeStats([]);
+    const stats = computeStats([], () => false, 'kg');
     assert.strictEqual(stats.totalXp, 0);
     assert.strictEqual(stats.workouts, 0);
     assert.strictEqual(stats.tonnage, 0);

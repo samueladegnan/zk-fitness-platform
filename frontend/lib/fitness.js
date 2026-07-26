@@ -43,27 +43,36 @@ function totalTonnage(sets) {
   return sets.reduce((sum, s) => sum + (s.weight || 0) * (s.reps || 0), 0);
 }
 
-function totalCardioDistance(sets) {
-  return sets.reduce((sum, s) => sum + (s.distance || 0), 0);
+function getCaloriesForSet(set, isCardio, units) {
+  if (isCardio) {
+    return Number(set.calories) || 0;
+  }
+  const weight = Number(set.weight);
+  const reps = Number(set.reps);
+  if (!weight || weight <= 0 || !reps || reps <= 0) return 0;
+  const weightKg = units === 'lbs' ? weight / 2.20462 : weight;
+  return weightKg * reps * 0.015;
 }
 
-function totalCardioCalories(sets) {
-  return sets.reduce((sum, s) => sum + (s.calories || 0), 0);
-}
-
-function totalCardioDuration(sets) {
-  return sets.reduce((sum, s) => sum + (s.durationMinutes || 0), 0);
-}
-
-function computeStats(workouts) {
+function computeStats(workouts, isCardioFn, units) {
   const totalXp = workouts.reduce((sum, w) => sum + (w.xp || 0), 0);
   const tonnage = workouts.reduce(
     (sum, w) => sum + totalTonnage(w.exercises.flatMap((e) => e.sets)),
     0
   );
-  const allSets = workouts.flatMap((w) => w.exercises.flatMap((e) => e.sets));
-  const distance = totalCardioDistance(allSets);
-  const calories = totalCardioCalories(allSets);
+  let distance = 0;
+  let calories = 0;
+  workouts.forEach((w) => {
+    w.exercises.forEach((ex) => {
+      const isCardio = isCardioFn ? isCardioFn(ex.exerciseId) : false;
+      ex.sets.forEach((s) => {
+        if (isCardio) {
+          distance += Number(s.distance) || 0;
+        }
+        calories += getCaloriesForSet(s, isCardio, units);
+      });
+    });
+  });
   return { totalXp, tonnage, workouts: workouts.length, distance, calories };
 }
 
@@ -229,10 +238,8 @@ export {
   xpForSet,
   xpForWorkout,
   totalTonnage,
-  totalCardioDistance,
-  totalCardioCalories,
-  totalCardioDuration,
   computeStats,
+  getCaloriesForSet,
   getLevel,
   xpToNextLevel,
   getPR,

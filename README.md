@@ -2,9 +2,9 @@
 
 🌐 **Live Portfolio:** [View the live portfolio &rarr;](https://samueladegnan.github.io/zk-fitness-platform/)
 
-A privacy-first, full-stack strength training platform built around a **Zero-Knowledge Architecture**. All exercise logs and progress metrics are encrypted client-side with AES-256-GCM before they ever touch the cloud, so your personal health data remains inaccessible to the server operator while still enabling cross-device synchronization and gamified analytics.
+A workout tracker that keeps your training history private. Everything is encrypted in your browser before it reaches the server, so your data is readable only by you. Cloud sync and gamified analytics still work because the server only stores opaque, encrypted blobs.
 
-This implementation also incorporates **NIST-standard Post-Quantum Cryptography (PQC)**. Authentication uses **ML-DSA-65** (Dilithium) signatures, and every sync uses a fresh data key encapsulated with **ML-KEM-768** (Kyber), so the system remains secure even against future cryptographically relevant quantum computers.
+The app also uses post-quantum cryptography (PQC): **ML-DSA-65** for login signatures and **ML-KEM-768** to wrap a fresh AES data key on every sync. That means the system stays secure even as quantum computers improve.
 
 ---
 
@@ -36,6 +36,7 @@ This platform flips the trust model. The server only stores **opaque, encrypted 
 - **Built-In Exercise Database**: searchable catalog of common strength and cardio exercises.
 - **Custom Exercises**: add your own exercises on the fly with category and equipment tags.
 - **Workout Plans**: reusable plan templates for full-body, upper/lower, and custom routines with a plan editor.
+- **Interactive Exercise Details**: tap any exercise in a plan, the workout, or history to view records, progress charts, a one-rep-max calculator, and full history.
 - **Active Workout Mode**: set logging with weight/reps, auto-calculated warmup sets, live workout timer, and rest timers between sets.
 - **Persistent Active Workout**: leave the workout page and come back later-the timer keeps running and progress is synced.
 - **Mid-Workout Editing**: add exercises during a workout, delete sets, and adjust reps/weight at any time.
@@ -45,6 +46,8 @@ This platform flips the trust model. The server only stores **opaque, encrypted 
 - **Confetti & Sounds**: celebratory confetti on workout completion and audio cues for timers.
 - **Demo / Portfolio Mode**: try the app instantly without a backend; data is stored locally.
 - **Dark Mode**: toggle between light and dark themes.
+- **Estimated Calorie Burn**: cardio calories from user input plus automatic strength estimates based on weight lifted and reps performed.
+- **Progressive Web App**: installable on mobile and desktop with an offline-capable app shell and service worker.
 - **Mobile-First Responsive Design**: touch-friendly controls and layouts that work on Android and iOS browsers.
 - **Cross-Device Sync**: encrypted state is fetched and decrypted on any authenticated device.
 - **Production-Ready Ops**: Docker containerization, TLS 1.3/mTLS ready, GitHub Actions CI/CD.
@@ -259,10 +262,9 @@ Registration requires solving a server-issued proof-of-work challenge in the bro
 - Optional `REGISTRATION_INVITE_CODE` environment variable to restrict sign-ups on public deployments.
 - Account lockout after repeated failed login attempts.
 
-### Known Limitations
+### Current Status
 
-- **No offline persistence**: workout data lives in memory; closing the tab without syncing loses unsynced data. IndexedDB/offline caching is on the roadmap.
-- **One-time PQC migration**: deployments that used the earlier Argon2id `authKeyHash` scheme must re-run migrations and users must re-register. Old encrypted blobs cannot be decrypted under the new ML-KEM data keys.
+This project is under active development and has not been released. The web app and PWA are live portfolio demonstrations, not a production product. The backend can be self-hosted or deployed to Render for testing. Encrypted data is now persisted locally with IndexedDB, so workouts survive browser restarts and work offline.
 
 ## Workout Tracking Features
 
@@ -287,9 +289,45 @@ Registration requires solving a server-issued proof-of-work challenge in the bro
 - **Custom exercises**: add your own exercises with custom name, category, and equipment.
 - **Filtering**: filter exercises by category to find the right movement quickly.
 
+## Monetization
+
+ZK Fitness is **free to use locally** with no ads. You keep full access to workout tracking, plans, exercise history, charts, and the one-rep-max calculator on any device.
+
+The only paid feature is **encrypted cloud sync** across devices, because that is the only part that incurs server costs:
+
+| Plan | Price | Best for |
+|---|---|---|
+| Monthly | $3.99 | Short-term or trial users |
+| Yearly | $29.99 | Regular users (save 37%) |
+| Lifetime | $79.99 | Long-term users who want to pay once |
+
+Payments are processed by Stripe. The backend stores only subscription metadata; workout data remains encrypted and unreadable by the server.
+
+If you cancel, your local data and all workout features stay fully usable. Cloud sync simply stops until you resubscribe.
+
+### Enabling billing (optional)
+
+If you skip this step, the app still works fully offline; the subscription card simply will not appear.
+
+1. In your [Stripe Dashboard](https://dashboard.stripe.com), create three products/prices:
+   - **ZK Fitness Monthly** at $3.99 USD, recurring monthly
+   - **ZK Fitness Yearly** at $29.99 USD, recurring yearly
+   - **ZK Fitness Lifetime** at $79.99 USD, one-time payment
+2. Add these environment variables to your backend host:
+   | Variable | Value |
+   |---|---|
+   | `STRIPE_SECRET_KEY` | `sk_live_...` from Stripe |
+   | `STRIPE_WEBHOOK_SECRET` | Webhook signing secret |
+   | `STRIPE_PRICE_MONTHLY` | Price ID for monthly plan |
+   | `STRIPE_PRICE_YEARLY` | Price ID for yearly plan |
+   | `STRIPE_PRICE_LIFETIME` | Price ID for lifetime plan |
+   | `STRIPE_SUCCESS_URL` | `https://<username>.github.io/zk-fitness-platform/frontend/` |
+   | `STRIPE_CANCEL_URL` | Same as above |
+3. Add a webhook endpoint for `checkout.session.completed` pointing to `https://your-api.onrender.com/api/billing/webhook`.
+
 ## Roadmap
 
-- [ ] Offline-first IndexedDB caching.
+- [x] Offline-first IndexedDB caching.
 - [ ] mTLS enforcement between client and API.
 - [ ] Audit logging of sync events without exposing payload contents.
 

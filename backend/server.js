@@ -23,6 +23,7 @@ const jwt = require('jsonwebtoken');
 const { randomBytes, createHash } = require('crypto');
 const cookieParser = require('cookie-parser');
 const { createPool } = require('./db');
+const billing = require('./lib/billing');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -76,8 +77,76 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
 
-app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
+
+// Stripe webhooks must receive the raw body for signature verification.
+// This route is mounted before express.json() so the body stays raw.
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), async (req, res, next) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+  try {
+    event = billing.getStripe().webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET || '');
+  } catch (err) {
+    console.error('Stripe webhook signature verification failed:', err.message);
+    return res.status(400).json({ error: 'Invalid signature' });
+  }
+
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const checkoutSession = event.data.object;
+      const userId = checkoutSession.metadata?.userId;
+      const mode = checkoutSession.mode;
+      let subscriptionType = 'lifetime';
+      let status = 'active';
+      let periodEnd = null;
+      let subscriptionId = null;
+
+      if (mode === 'subscription') {
+        const subscription = await billing.stripe.subscriptions.retrieve(checkoutSession.subscription);
+        subscriptionType = 'subscription';
+        subscriptionId = subscription.id;
+        periodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+        status = subscription.status === 'trialing' ? 'active' : subscription.status;
+      }
+
+      await pool.query(
+        `UPDATE users SET
+          subscription_status = $1,
+          subscription_type = $2,
+          stripe_customer_id = COALESCE($3, stripe_customer_id),
+          stripe_subscription_id = COALESCE($4, stripe_subscription_id),
+          subscription_period_end = $5
+         WHERE id = $6`,
+        [status, subscriptionType, checkoutSession.customer, subscriptionId, periodEnd, userId]
+      );
+    } else if (event.type === 'invoice.paid' && event.data.object.subscription) {
+      const invoice = event.data.object;
+      const subscription = await billing.stripe.subscriptions.retrieve(invoice.subscription);
+      const customerId = subscription.customer;
+      const periodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+      await pool.query(
+        `UPDATE users SET
+          subscription_status = $1,
+          subscription_type = 'subscription',
+          subscription_period_end = $2,
+          stripe_subscription_id = $3
+         WHERE stripe_customer_id = $4`,
+        [subscription.status === 'trialing' ? 'active' : subscription.status, periodEnd, subscription.id, customerId]
+      );
+    } else if (event.type === 'customer.subscription.deleted') {
+      const subscription = event.data.object;
+      await pool.query(
+        "UPDATE users SET subscription_status = 'inactive', subscription_type = NULL, subscription_period_end = NULL WHERE stripe_subscription_id = $1",
+        [subscription.id]
+      );
+    }
+    res.json({ received: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.use(express.json({ limit: '2mb' }));
 
 // ─── Database ───────────────────────────────────────────────────────────────
 const pool = createPool();
@@ -159,6 +228,16 @@ const registerLimiter = rateLimit({
   keyGenerator: (req) => req.ip,
   skip: () => IS_TEST,
   message: { error: 'Too many registration attempts from this IP. Please try again later.' },
+});
+
+const billingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
+  skip: () => IS_TEST,
+  message: { error: 'Too many billing requests from this IP. Please try again later.' },
 });
 
 const usernameAuthLimiter = rateLimit({
@@ -402,16 +481,45 @@ app.post('/api/auth/logout', authenticate, async (req, res) => {
  */
 app.get('/api/auth/session', authenticate, async (req, res) => {
   const result = await pool.query(
-    'SELECT username FROM users WHERE id = $1', [req.userId]);
+    'SELECT username, subscription_status, subscription_type, subscription_period_end FROM users WHERE id = $1', [req.userId]);
   if (result.rows.length === 0) {
     clearAuthCookie(res);
     return res.status(401).json({ error: 'User not found' });
   }
-  res.json({ username: result.rows[0].username });
+  const status = subscriptionStatusForRow(result.rows[0]);
+  res.json({
+    username: result.rows[0].username,
+    subscription: {
+      status,
+      type: result.rows[0].subscription_type,
+      isPaid: billing.isPaidSubscription(status),
+      billingEnabled: billing.isBillingConfigured(),
+    },
+  });
 });
 
+async function requireActiveSubscription(req, res, next) {
+  if (IS_TEST) return next();
+  try {
+    const result = await pool.query(
+      'SELECT subscription_status, subscription_type, subscription_period_end FROM users WHERE id = $1',
+      [req.userId]
+    );
+    const status = subscriptionStatusForRow(result.rows[0]);
+    if (!billing.isPaidSubscription(status)) {
+      return res.status(403).json({
+        error: 'Cloud sync requires an active subscription.',
+        code: 'SUBSCRIPTION_REQUIRED',
+      });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ─── Sync ─────────────────────────────────────────────────────────────────────
-app.get('/api/sync', authenticate, async (req, res, next) => {
+app.get('/api/sync', authenticate, requireActiveSubscription, async (req, res, next) => {
   try {
     const result = await pool.query(
       'SELECT encrypted_blob, kem_ciphertext, updated_at FROM sync_data WHERE user_id = $1',
@@ -432,7 +540,7 @@ app.get('/api/sync', authenticate, async (req, res, next) => {
   }
 });
 
-app.put('/api/sync', authenticate, async (req, res, next) => {
+app.put('/api/sync', authenticate, requireActiveSubscription, async (req, res, next) => {
   try {
     const { encryptedBlob, kemCiphertext } = req.body;
     if (!encryptedBlob || typeof encryptedBlob !== 'string' || !kemCiphertext || typeof kemCiphertext !== 'string') {
@@ -451,6 +559,71 @@ app.put('/api/sync', authenticate, async (req, res, next) => {
     );
 
     res.json({ message: 'Sync data stored' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Billing ─────────────────────────────────────────────────────────────────
+
+function subscriptionStatusForRow(row) {
+  if (!row) return 'inactive';
+  if (row.subscription_status === 'active') {
+    if (row.subscription_type === 'lifetime') return 'active';
+    if (row.subscription_period_end && new Date(row.subscription_period_end) > new Date()) return 'active';
+    return 'inactive';
+  }
+  return row.subscription_status || 'inactive';
+}
+
+app.get('/api/billing/status', authenticate, async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      'SELECT subscription_status, subscription_type, subscription_period_end, stripe_customer_id FROM users WHERE id = $1',
+      [req.userId]
+    );
+    const status = subscriptionStatusForRow(result.rows[0]);
+    res.json({
+      status,
+      type: result.rows[0]?.subscription_type || null,
+      isPaid: billing.isPaidSubscription(status),
+      billingEnabled: billing.isBillingConfigured(),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/billing/checkout', authenticate, billingLimiter, async (req, res, next) => {
+  try {
+    if (!billing.isBillingConfigured()) {
+      return res.status(503).json({ error: 'Billing is not configured.' });
+    }
+    const { priceId, priceType } = req.body;
+    const priceIds = billing.getPriceIds();
+    const targetPriceId = priceIds[priceType] || priceId;
+    if (!targetPriceId) {
+      return res.status(400).json({ error: 'Invalid price or product type.' });
+    }
+    const session = await billing.createCheckoutSession({
+      userId: req.userId,
+      priceId: targetPriceId,
+    });
+    res.json({ url: session.url, sessionId: session.id });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/billing/portal', authenticate, billingLimiter, async (req, res, next) => {
+  try {
+    const result = await pool.query('SELECT stripe_customer_id FROM users WHERE id = $1', [req.userId]);
+    const customerId = result.rows[0]?.stripe_customer_id;
+    if (!customerId) {
+      return res.status(400).json({ error: 'No Stripe customer record found.' });
+    }
+    const session = await billing.createBillingPortalSession({ customerId });
+    res.json({ url: session.url });
   } catch (err) {
     next(err);
   }
