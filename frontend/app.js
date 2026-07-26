@@ -874,7 +874,7 @@ function initAuthUI() {
     }
 
     const actionText = isRegisterMode ? 'Creating your account' : 'Logging you in';
-    showLoadingModal(`${actionText}. The post-quantum crypto setup can take a few seconds the first time. Please wait.`);
+    showLoadingModal(`${actionText}. Please wait.`);
 
     try {
       await performPasswordAuth(username, password, inviteCode);
@@ -964,7 +964,7 @@ function renderNav() {
   $('nav-dashboard').addEventListener('click', () => { showView('dashboard-view'); renderDashboard(); });
   $('nav-plans').addEventListener('click', () => { showView('plans-view'); renderPlans(); });
   $('nav-history').addEventListener('click', () => { showView('history-view'); renderHistory(); });
-  $('nav-exercises').addEventListener('click', () => { showView('exercises-view'); renderExercises(); });
+  $('nav-exercises').addEventListener('click', () => { exerciseSelectCallback = null; showView('exercises-view'); renderExercises(); });
   $('nav-logout').addEventListener('click', logout);
 }
 
@@ -1466,12 +1466,16 @@ function openPlanEditor(planId) {
       } else {
         session.data.plans.push(planEditorDraft);
       }
+      planEditorCallback = null;
+      exerciseSelectCallback = null;
       syncDataImmediate();
       showView('plans-view');
       renderPlans();
     });
 
     $('cancel-plan-btn').addEventListener('click', () => {
+      planEditorCallback = null;
+      exerciseSelectCallback = null;
       showView('plans-view');
       renderPlans();
     });
@@ -1480,6 +1484,7 @@ function openPlanEditor(planId) {
       planEditorCallback = (exerciseId) => {
         planEditorCallback = null;
         planEditorDraft.exercises.push(createWorkoutExercise(exerciseId));
+        showView('plan-editor-view');
         renderEditor();
       };
       showView('exercises-view');
@@ -1487,9 +1492,9 @@ function openPlanEditor(planId) {
         if (planEditorCallback) {
           planEditorCallback(exerciseId);
         }
+        exerciseSelectCallback = null;
       };
-      exerciseSelectButtonText = 'Add to Plan';
-      renderExercises();
+      renderExercises('Add to Plan');
     });
 
     container.querySelectorAll('.plan-exercise-fields input').forEach((input) => {
@@ -1516,9 +1521,9 @@ function openPlanEditor(planId) {
 let exerciseSelectCallback = null;
 let exerciseSelectButtonText = 'Add to Workout';
 
-function renderExercises() {
+function renderExercises(buttonText = null) {
   const container = $('exercises-list');
-  exerciseSelectButtonText = 'Add to Workout';
+  exerciseSelectButtonText = buttonText || exerciseSelectButtonText || 'Add to Workout';
   const cats = ['All', ...new Set(EXERCISE_CATALOG.map((e) => e.category))];
 
   container.innerHTML = `
@@ -2113,7 +2118,6 @@ function initExerciseDragAndDrop(container, workout) {
 
 function openExerciseSelector() {
   showView('exercises-view');
-  exerciseSelectButtonText = 'Add to Workout';
   exerciseSelectCallback = (exerciseId) => {
     const workout = getActiveWorkout();
     if (workout) {
@@ -2124,7 +2128,7 @@ function openExerciseSelector() {
     showView('workout-view');
     renderActiveWorkout();
   };
-  renderExercises();
+  renderExercises('Add to Workout');
 }
 
 function startRestTimer(exIdx, seconds) {
