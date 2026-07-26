@@ -29,6 +29,7 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
 const IS_DEV = process.env.NODE_ENV !== 'production';
+const IS_TEST = process.env.NODE_ENV === 'test';
 const COOKIE_NAME = 'zkfitness_session';
 const ORIGIN = process.env.CLIENT_ORIGIN || undefined;
 
@@ -135,6 +136,7 @@ const generalLimiter = rateLimit({
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => IS_TEST,
   message: { error: 'Too many requests, please slow down.' },
 });
 app.use('/api/', generalLimiter);
@@ -145,6 +147,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.ip,
+  skip: () => IS_TEST,
   message: { error: 'Too many auth attempts from this IP. Please try again later.' },
 });
 
@@ -154,6 +157,7 @@ const registerLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.ip,
+  skip: () => IS_TEST,
   message: { error: 'Too many registration attempts from this IP. Please try again later.' },
 });
 
@@ -163,6 +167,7 @@ const usernameAuthLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.body?.username || req.ip,
+  skip: () => IS_TEST,
   message: { error: 'Too many auth attempts for this username. Please try again later.' },
 });
 

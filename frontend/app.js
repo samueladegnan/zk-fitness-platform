@@ -874,7 +874,7 @@ function initAuthUI() {
     }
 
     const actionText = isRegisterMode ? 'Creating your account' : 'Logging you in';
-    showLoadingModal(`${actionText} - the post-quantum crypto setup can take a few seconds the first time. Please wait.`);
+    showLoadingModal(`${actionText}. The post-quantum crypto setup can take a few seconds the first time. Please wait.`);
 
     try {
       await performPasswordAuth(username, password, inviteCode);
@@ -932,7 +932,7 @@ async function startDemoMode() {
     await loadSync();
     showView('dashboard-view');
     renderDashboard();
-    showToast('Demo mode active - your data is stored locally', 'info');
+    showToast('Demo mode active. Your data is stored locally', 'info');
   } catch (err) {
     $('auth-error').textContent = err.message;
   }

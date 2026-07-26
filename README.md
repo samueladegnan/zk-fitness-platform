@@ -214,7 +214,7 @@ For local development, leave `ZK_API_BASE` unset. The app falls back to `http://
 
 This step explains what the `CLIENT_ORIGIN` environment variable from Step 2 does. You do **not** set it in a different place.
 
-The backend uses `CLIENT_ORIGIN` to validate incoming requests and to decide how to set cookies. It must be the GitHub Pages origin - the host only, not the full repository path.
+The backend uses `CLIENT_ORIGIN` to validate incoming requests and to decide how to set cookies. It must be the GitHub Pages origin (the host only, not the full repository path).
 
 | Setting | Example value |
 |---|---|

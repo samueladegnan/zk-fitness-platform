@@ -12,6 +12,27 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
+function normalizeDatabaseUrl(urlString) {
+  let url;
+  try {
+    url = new URL(urlString);
+  } catch {
+    throw new Error(
+      'DATABASE_URL is not a valid URL. Make sure special characters in the password are percent-encoded.'
+    );
+  }
+
+  const sslMode = url.searchParams.get('sslmode');
+  if (sslMode && ['prefer', 'require', 'verify-ca'].includes(sslMode)) {
+    // pg currently treats the above modes as verify-full. In pg v9 they will
+    // switch to standard libpq semantics and emit a deprecation warning unless
+    // the mode is explicit. Keep current (strict) behavior and silence the warning.
+    url.searchParams.set('sslmode', 'verify-full');
+  }
+
+  return url.toString();
+}
+
 function createPool() {
   const baseConfig = {
     // Fail fast if Postgres is not reachable instead of hanging tests/requests.
@@ -19,21 +40,15 @@ function createPool() {
   };
 
   if (process.env.DATABASE_URL) {
-    let url;
-    try {
-      url = new URL(process.env.DATABASE_URL);
-    } catch {
-      throw new Error(
-        'DATABASE_URL is not a valid URL. Make sure special characters in the password are percent-encoded.'
-      );
-    }
+    const connectionString = normalizeDatabaseUrl(process.env.DATABASE_URL);
+    const url = new URL(connectionString);
 
     const isLocal =
       url.hostname === 'localhost' || url.hostname === '127.0.0.1';
 
     return new Pool({
       ...baseConfig,
-      connectionString: process.env.DATABASE_URL,
+      connectionString,
       // Managed Postgres providers (e.g. Neon) require TLS. Local/dev URLs
       // such as localhost/127.0.0.1 do not.
       ssl: isLocal ? undefined : true,

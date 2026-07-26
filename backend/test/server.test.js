@@ -1,3 +1,5 @@
+process.env.NODE_ENV ??= 'test';
+
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const request = require('supertest');
@@ -176,7 +178,7 @@ describe('Sync endpoints', () => {
 
     const challengeRes = await request(app).get('/api/auth/challenge').expect(200);
     const solution = solvePoW(testKeyPair.dsaPublicKey, challengeRes.body.nonce, challengeRes.body.difficulty);
-    await request(app)
+    const registerRes = await request(app)
       .post('/api/auth/register')
       .send({
         username: TEST_USER,
@@ -184,18 +186,23 @@ describe('Sync endpoints', () => {
         kemPublicKey: testKeyPair.kemPublicKey,
         challenge: challengeRes.body.nonce,
         solution,
-      });
+      })
+      .expect(201);
+    assert.ok(getCookie(registerRes));
 
     const nonceRes = await request(app)
       .post('/api/auth/login')
-      .send({ username: TEST_USER });
+      .send({ username: TEST_USER })
+      .expect(200);
     const signature = await signNonce(nonceRes.body.nonce, testKeyPair.dsaKeyPair.secretKey);
     const loginRes = await request(app)
       .post('/api/auth/login')
       .send({
         username: TEST_USER,
         signature: arrayBufferToBase64(signature),
-      });
+      })
+      .expect(200);
+    assert.ok(getCookie(loginRes));
     cookie = getCookie(loginRes);
   });
 
