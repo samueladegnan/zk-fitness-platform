@@ -874,7 +874,7 @@ function initAuthUI() {
     }
 
     const actionText = isRegisterMode ? 'Creating your account' : 'Logging you in';
-    showLoadingModal(`${actionText}. Please wait.`);
+    showLoadingModal(`${actionText}. The first time can take a few seconds. Please wait.`);
 
     try {
       await performPasswordAuth(username, password, inviteCode);
