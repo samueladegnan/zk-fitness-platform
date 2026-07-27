@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Build a portfolio-ready HTML page from guardrail markdown reports."""
 
-from datetime import datetime, timezone
 from html import escape
-import os
 from pathlib import Path
 import re
+
+
+# Example reports are shown when the real guardrail scan returns no findings.
+# They live in docs/ so the page is never empty.
 
 
 def load_markdown(path: Path) -> str:
@@ -130,15 +132,14 @@ def main() -> None:
     backend_note = example_note if backend_is_example else ""
     frontend_note = example_note if frontend_is_example else ""
 
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-
-    server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
-    run_id = os.environ.get("GITHUB_RUN_ID", "")
-    repo = os.environ.get("GITHUB_REPOSITORY", "samueladegnan/zk-fitness-platform")
-    if run_id:
-        provenance = f'<a href="{server_url}/{repo}/actions/runs/{run_id}">View run on GitHub</a>'
-    else:
-        provenance = "Generated locally."
+    # Static provenance: the file is now deterministic, so it only changes when
+    # the underlying report content changes. This prevents the guardrail workflow
+    # from creating a new commit on every run.
+    provenance = (
+        "Generated automatically by the "
+        '<a href="https://github.com/samueladegnan/ai-cicd-security-guardrail">'
+        "ai-cicd-security-guardrail</a> GitHub Actions workflow."
+    )
 
     page = f"""<!DOCTYPE html>
 <html lang="en">
@@ -183,7 +184,7 @@ def main() -> None:
   </header>
 
   <main id="main-content" class="main-content">
-    <p class="report-meta">Generated: {generated_at} &bull; Tool: <a href="https://github.com/samueladegnan/ai-cicd-security-guardrail">ai-cicd-security-guardrail</a> &bull; {provenance}</p>
+    <p class="report-meta">{provenance}</p>
     <p class="report-credit">Generated with <a href=\"https://github.com/samueladegnan/ai-cicd-security-guardrail\">ai-cicd-security-guardrail</a>, another project by <a href=\"https://samueladegnan.github.io/\">Samuel Degnan</a>.</p>
 
     <h2>What This Report Shows</h2>
