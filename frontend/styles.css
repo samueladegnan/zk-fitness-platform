@@ -251,22 +251,23 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   margin-top: 0.5rem;
 }
 
-.demo-actions {
+.local-actions {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
   text-align: center;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 0.5rem;
 }
 
-.demo-actions button {
+.local-actions button {
   background: linear-gradient(135deg, var(--accent), var(--accent-light));
   border: none;
 }
 
-.demo-actions .small {
+.local-actions .small {
   font-size: 0.8rem;
   margin: 0;
 }

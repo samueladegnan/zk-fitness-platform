@@ -629,6 +629,89 @@ app.post('/api/billing/portal', authenticate, billingLimiter, async (req, res, n
   }
 });
 
+/**
+ * POST /api/billing/refund
+ * Automated refund for eligible plans (yearly and lifetime within 14 days).
+ * Monthly plans cannot be refunded; users are directed to cancel instead.
+ */
+app.post('/api/billing/refund', authenticate, billingLimiter, async (req, res, next) => {
+  try {
+    if (!billing.isBillingConfigured()) {
+      return res.status(503).json({ error: 'Billing is not configured.' });
+    }
+
+    const userResult = await pool.query(
+      'SELECT stripe_customer_id, stripe_subscription_id, subscription_type, subscription_period_end FROM users WHERE id = $1',
+      [req.userId]
+    );
+    const user = userResult.rows[0];
+    if (!user?.stripe_customer_id) {
+      return res.status(400).json({ error: 'No Stripe customer record found.' });
+    }
+
+    const type = user.subscription_type;
+    if (type === 'monthly' || type === 'subscription') {
+      return res.status(400).json({
+        error: 'Monthly subscriptions are not eligible for refund. Please use the Billing Portal to cancel future renewals.',
+        code: 'REFUND_NOT_ELIGIBLE',
+      });
+    }
+    if (type !== 'yearly' && type !== 'lifetime') {
+      return res.status(400).json({ error: 'No refundable subscription found.' });
+    }
+
+    let paymentIntent = null;
+    let stripeSubscription = null;
+    let startedAt = null;
+
+    if (type === 'yearly') {
+      if (!user.stripe_subscription_id) {
+        return res.status(400).json({ error: 'No active yearly subscription found.' });
+      }
+      stripeSubscription = await billing.getStripe().subscriptions.retrieve(user.stripe_subscription_id);
+      startedAt = new Date(stripeSubscription.current_period_start * 1000);
+      const paymentIntentId = stripeSubscription.latest_invoice?.payment_intent;
+      if (paymentIntentId) {
+        paymentIntent = await billing.getStripe().paymentIntents.retrieve(paymentIntentId);
+      }
+    } else {
+      // Lifetime plans are one-time payments; find the latest payment intent.
+      paymentIntent = await billing.getLatestPaymentIntent(user.stripe_customer_id);
+      if (paymentIntent) {
+        startedAt = new Date(paymentIntent.created * 1000);
+      }
+    }
+
+    if (!paymentIntent) {
+      return res.status(400).json({ error: 'Unable to locate payment record for refund.' });
+    }
+
+    const daysSincePurchase = startedAt ? (Date.now() - startedAt.getTime()) / (1000 * 60 * 60 * 24) : Infinity;
+    if (daysSincePurchase > 14) {
+      return res.status(400).json({
+        error: 'Refund window has expired. Yearly and Lifetime plans are refundable within 14 days of purchase.',
+        code: 'REFUND_WINDOW_EXPIRED',
+      });
+    }
+
+    await billing.createRefund({ paymentIntentId: paymentIntent.id });
+
+    // Cancel yearly subscription if applicable.
+    if (type === 'yearly' && user.stripe_subscription_id) {
+      await billing.getStripe().subscriptions.cancel(user.stripe_subscription_id);
+    }
+
+    await pool.query(
+      "UPDATE users SET subscription_status = 'inactive', subscription_type = NULL, subscription_period_end = NULL WHERE id = $1",
+      [req.userId]
+    );
+
+    res.json({ message: 'Refund processed successfully. Cloud sync will remain active until the end of the current period for yearly plans, or immediately for lifetime plans.' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── Health & Errors ────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 

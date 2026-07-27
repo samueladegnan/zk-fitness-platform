@@ -1,0 +1,152 @@
+name: AI CICD Security Guardrail
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  security-events: write
+
+jobs:
+  guardrail:
+    name: Security Guardrail Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd backend && npm ci
+          cd ../frontend && npm ci
+
+      - name: Run npm audit
+        run: |
+          cd backend && npm audit --audit-level=moderate || true
+          cd ../frontend && npm audit --audit-level=moderate || true
+
+      - name: Generate ESLint SARIF report (backend)
+        id: eslint-backend
+        continue-on-error: true
+        run: |
+          cd backend
+          npm install --no-save @microsoft/eslint-formatter-sarif
+          npx eslint . \
+            --format @microsoft/eslint-formatter-sarif \
+            --output-file ../backend.sarif
+
+      - name: Generate ESLint SARIF report (frontend)
+        id: eslint-frontend
+        continue-on-error: true
+        run: |
+          cd frontend
+          npm install --no-save @microsoft/eslint-formatter-sarif
+          npx eslint . \
+            --format @microsoft/eslint-formatter-sarif \
+            --output-file ../frontend.sarif
+
+      - name: AI Guardrail triage (backend)
+        if: steps.eslint-backend.outcome == 'success'
+        # Pinned to the v1.0.0 release of the reusable guardrail action for
+        # stability. The integration-health workflow runs regularly to verify
+        # compatibility before any future upgrade.
+        uses: samueladegnan/ai-cicd-security-guardrail@v1.0.0
+        with:
+          report-path: ./backend.sarif
+          format: sarif
+          repo-root: .
+          provider: ${{ secrets.AI_GUARD_PROVIDER || 'mock' }}
+          llm-api-key: ${{ secrets.AI_GUARD_API_KEY || '' }}
+          output-json: ./backend-guardrail-report.json
+          output-markdown: ./backend-guardrail-report.md
+        continue-on-error: true
+
+      - name: AI Guardrail triage (frontend)
+        if: steps.eslint-frontend.outcome == 'success'
+        # Pinned to the v1.0.0 release of the reusable guardrail action for
+        # stability. The integration-health workflow runs regularly to verify
+        # compatibility before any future upgrade.
+        uses: samueladegnan/ai-cicd-security-guardrail@v1.0.0
+        with:
+          report-path: ./frontend.sarif
+          format: sarif
+          repo-root: .
+          provider: ${{ secrets.AI_GUARD_PROVIDER || 'mock' }}
+          llm-api-key: ${{ secrets.AI_GUARD_API_KEY || '' }}
+          output-json: ./frontend-guardrail-report.json
+          output-markdown: ./frontend-guardrail-report.md
+        continue-on-error: true
+
+      - name: Scan for hardcoded secrets
+        run: |
+          python3 - <<'PY'
+          import re, sys, os
+          patterns = [
+              r'(?i)(api[_-]?key|secret|password|token)\s*=\s*["\'][^"\']{8,}["\']',
+              r'sk_live_[a-zA-Z0-9]{24,}',
+              r'-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----',
+          ]
+          hits = 0
+          for root, _, files in os.walk('.'):
+              if any(x in root for x in ['.git', 'node_modules']):
+                  continue
+              for f in files:
+                  if f.endswith(('.js', '.json', '.yml', '.yaml', '.env.example', '.md')):
+                      path = os.path.join(root, f)
+                      try:
+                          with open(path, 'r', encoding='utf-8', errors='ignore') as fh:
+                              for i, line in enumerate(fh, 1):
+                                  for p in patterns:
+                                      if re.search(p, line):
+                                          print(f'{path}:{i}: {line.strip()}')
+                                          hits += 1
+                      except Exception:
+                          pass
+          if hits:
+              print(f'Guardrail found {hits} potential secret(s). Review before merging.')
+              sys.exit(1)
+          print('Guardrail passed: no obvious secrets detected.')
+          PY
+
+      - name: Build guardrail report page
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 scripts/build-guardrail-report.py
+
+      - name: Upload guardrail reports
+        if: always() && (hashFiles('backend-guardrail-report.json') != '' || hashFiles('frontend-guardrail-report.json') != '')
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardrail-reports
+          path: |
+            backend-guardrail-report.json
+            backend-guardrail-report.md
+            frontend-guardrail-report.json
+            frontend-guardrail-report.md
+
+      - name: Commit latest guardrail report page
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add guardrail.html
+          if git diff --cached --quiet; then
+            echo "No changes to guardrail.html"
+          else
+            git commit -m "docs: update guardrail report"
+            git push origin main
+          fi

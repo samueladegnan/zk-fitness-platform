@@ -1,0 +1,60 @@
+name: AI Guardrail Integration Health
+
+on:
+  schedule:
+    # Run every Sunday at 03:00 UTC.
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+# Verifies that the AI Guardrail reusable action remains compatible with this
+# repository. The guardrail is pinned to a stable release; this workflow runs
+# periodically to catch upstream issues before a future upgrade.
+
+jobs:
+  guardrail-health:
+    name: AI Guardrail compatibility check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install backend dependencies
+        run: cd backend && npm ci
+
+      - name: Generate a sample SARIF report
+        continue-on-error: true
+        run: |
+          cd backend
+          npm install --no-save @microsoft/eslint-formatter-sarif
+          npx eslint . \
+            --format @microsoft/eslint-formatter-sarif \
+            --output-file ../health-check.sarif
+
+      - name: Run AI Guardrail action (compatibility check)
+        if: hashFiles('health-check.sarif') != ''
+        uses: samueladegnan/ai-cicd-security-guardrail@v1.0.0
+        with:
+          report-path: ./health-check.sarif
+          format: sarif
+          repo-root: .
+          provider: mock
+          output-json: ./guardrail-health-report.json
+          output-markdown: ./guardrail-health-report.md
+
+      - name: Upload health report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardrail-health-report
+          path: |
+            guardrail-health-report.json
+            guardrail-health-report.md
+            health-check.sarif

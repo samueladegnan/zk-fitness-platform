@@ -15,7 +15,12 @@
     "install:backend": "cd backend && npm install",
     "test:backend": "cd backend && npm test",
     "test:frontend": "cd frontend && npm test",
-    "test": "npm run test:backend && npm run test:frontend"
+    "test:e2e": "npx playwright test --config e2e/playwright.config.js",
+    "test": "npm run test:backend && npm run test:frontend",
+    "mobile:sync": "npx cap sync",
+    "mobile:ios": "npx cap open ios",
+    "mobile:android": "npx cap open android",
+    "desktop:build": "npx tauri build"
   },
   "keywords": [
     "zero-knowledge",
@@ -28,6 +33,7 @@
   "license": "MIT",
   "devDependencies": {
     "@noble/post-quantum": "^0.6.1",
+    "@playwright/test": "^1.49.0",
     "argon2-browser": "^1.18.0",
     "esbuild": "^0.28.1",
     "kill-port": "^2.0.1"

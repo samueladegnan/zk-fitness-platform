@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Architecture | ZK Fitness</title>
+  <title>ZK Fitness | Architecture</title>
   <meta name="description" content="Architecture of the ZK Fitness zero-knowledge workout tracking platform." />
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
   <link rel="stylesheet" href="./assets/css/style.css" />
@@ -17,6 +17,7 @@
       <li><a href="./">Overview</a></li>
       <li><a href="./demo.html">Live Demo</a></li>
       <li><a class="active" href="./architecture.html" aria-current="page">Architecture</a></li>
+      <li><a href="./guardrail.html">Security Report</a></li>
       <li>
         <a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform" aria-label="View source on GitHub">GitHub</a>
       </li>
@@ -26,7 +27,7 @@
 
   <header class="page-header">
     <h1 class="project-name">ZK Fitness</h1>
-    <p class="project-tagline">Keep your workout history private. Encrypted in your browser, readable only by you.</p>
+    <p class="project-tagline">Keep your workout history private. Encrypted on your device, readable only by you.</p>
     <a class="btn" href="./frontend/">Launch Live Demo</a>
   </header>
 
@@ -40,7 +41,7 @@
 
     <h2>Zero-Knowledge Flow</h2>
     <ol>
-      <li>The user enters a password in the browser.</li>
+      <li>The user enters a password on the client.</li>
       <li>Argon2id derives both an authentication key and an encryption key from the password.</li>
       <li>The client encrypts workout data with AES-256-GCM before sending it to the server.</li>
       <li>The server stores the encrypted blob in PostgreSQL.</li>
@@ -63,9 +64,14 @@
           <td>UI and local state</td>
         </tr>
         <tr>
-          <td>Cryptography</td>
-          <td>Web Crypto API, Argon2id</td>
-          <td>Key derivation &amp; AES-256-GCM encryption</td>
+          <td>Symmetric Encryption</td>
+          <td>Web Crypto API, AES-256-GCM, Argon2id</td>
+          <td>On-device key derivation and bulk data encryption</td>
+        </tr>
+        <tr>
+          <td>Post-Quantum Crypto</td>
+          <td>ML-DSA-65, ML-KEM-768 (@noble/post-quantum)</td>
+          <td>Client-side login signatures and per-sync key encapsulation</td>
         </tr>
         <tr>
           <td>Backend</td>
@@ -84,24 +90,12 @@
         </tr>
       </tbody>
     </table>
-
-    <h2>Project Links</h2>
-    <ul>
-      <li><a href="https://github.com/samueladegnan/zk-fitness-platform">Source Code on GitHub</a></li>
-      <li><a href="./frontend/">Live Web App</a></li>
-      <li><a href="./demo.html">Live Demo &amp; Setup</a></li>
-    </ul>
   </main>
 
   <footer class="site-footer">
     <div class="site-footer__inner">
       <p class="site-footer__tagline">Privacy-first strength &amp; cardio tracking with client-side encryption.</p>
-      <p class="site-footer__links">
-        <a href="https://samueladegnan.github.io/">Portfolio</a>
-        <span aria-hidden="true">&bull;</span>
-        <a href="https://github.com/samueladegnan/zk-fitness-platform">GitHub</a>
-      </p>
-      <p class="site-footer__copyright">&copy; 2026 <a href="https://github.com/samueladegnan">Samuel Degnan</a></p>
+      <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </div>
   </footer>
 </body>

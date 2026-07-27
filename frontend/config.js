@@ -7,7 +7,6 @@
  * backend URL.
  */
 (function () {
-  // eslint-disable-next-line no-undef
   if (typeof window !== 'undefined' && !window.ZK_API_BASE) {
     // Default: local development backend. Override for production.
     window.ZK_API_BASE = 'http://localhost:3000/api';

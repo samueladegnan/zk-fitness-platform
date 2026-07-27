@@ -2,7 +2,7 @@
 
 🌐 **Live Portfolio:** [View the live portfolio &rarr;](https://samueladegnan.github.io/zk-fitness-platform/)
 
-A workout tracker that keeps your training history private. Everything is encrypted in your browser before it reaches the server, so your data is readable only by you. Cloud sync and gamified analytics still work because the server only stores opaque, encrypted blobs.
+A workout tracker that keeps your training history private. Everything is encrypted on your device before it reaches the server, so your data is readable only by you. Cloud sync and gamified analytics still work because the server only stores opaque, encrypted blobs.
 
 The app also uses post-quantum cryptography (PQC): **ML-DSA-65** for login signatures and **ML-KEM-768** to wrap a fresh AES data key on every sync. That means the system stays secure even as quantum computers improve.
 
@@ -18,62 +18,49 @@ Traditional workout apps collect sensitive personal health metrics on centralize
 
 ## The Solution
 
-This platform flips the trust model. The server only stores **opaque, encrypted payloads** and public keys. Keys are derived from the user's credentials on the client using **Argon2id** and never leave the browser. The gamification engine (XP, tonnage, progressive overload) runs entirely in the browser on decrypted local data, then re-encrypts state updates for cloud storage.
+This platform flips the trust model. The server only stores **opaque, encrypted payloads** and public keys. Keys are derived from the user's credentials on the client using **Argon2id** and never leave the device. The gamification engine (XP, tonnage, progressive overload) runs entirely on the client on decrypted local data, then re-encrypts state updates for cloud storage.
 
 ### Post-Quantum Cryptography
 
 - **ML-DSA-65 (Dilithium)** signs a server-issued nonce during login. The server stores only the user's public key and verifies the signature without ever seeing the private key.
 - **ML-KEM-768 (Kyber)** encapsulates a per-sync AES-256-GCM data key. The server stores only the ML-KEM ciphertext; the private key remains client-side.
 - **AES-256-GCM** is used for bulk data encryption. AES-256 is already considered quantum-resistant for symmetric cryptography, so the post-quantum layer protects the key exchange and authentication paths.
+- **Local mode** does not need PQC: data never leaves the device, so Argon2id-derived AES-256-GCM is sufficient. PQC is only used when you enable cloud sync, where the client must authenticate to the server and protect the per-sync AES key.
 - All PQC primitives are provided by `@noble/post-quantum`, a zero-dependency, auditable JavaScript library.
 
 ## Key Features
 
-- **Client-Side Cryptography**: Web Crypto API (AES-256-GCM) with keys derived via Argon2id from user credentials.
-- **Zero-Knowledge Storage**: Node.js/Express API + PostgreSQL stores only encrypted blobs and authentication hashes.
-- **Client-Side Gamification Engine**: XP, levels, badges, workout streaks, personal records, and progressive-overload analytics computed entirely in the browser.
-- **Strength & Cardio Tracking**: log weight/reps for strength exercises and distance, duration, heart rate, and calories for cardio.
-- **Built-In Exercise Database**: searchable catalog of common strength and cardio exercises.
-- **Custom Exercises**: add your own exercises on the fly with category and equipment tags.
-- **Workout Plans**: reusable plan templates for full-body, upper/lower, and custom routines with a plan editor.
-- **Interactive Exercise Details**: tap any exercise in a plan, the workout, or history to view records, progress charts, a one-rep-max calculator, and full history.
-- **Active Workout Mode**: set logging with weight/reps, auto-calculated warmup sets, live workout timer, and rest timers between sets.
-- **Persistent Active Workout**: leave the workout page and come back later-the timer keeps running and progress is synced.
-- **Mid-Workout Editing**: add exercises during a workout, delete sets, and adjust reps/weight at any time.
-- **Rest Timer with +/-30s Controls**: quickly adjust rest time during a workout with a tap.
-- **Warmup Set Generator**: generate warmup sets based on your target working weight.
-- **Barbell Math**: automatic plate calculation when entering weights.
-- **Confetti & Sounds**: celebratory confetti on workout completion and audio cues for timers.
-- **Demo / Portfolio Mode**: try the app instantly without a backend; data is stored locally.
-- **Dark Mode**: toggle between light and dark themes.
-- **Estimated Calorie Burn**: cardio calories from user input plus automatic strength estimates based on weight lifted and reps performed.
-- **Progressive Web App**: installable on mobile and desktop with an offline-capable app shell and service worker.
-- **Mobile-First Responsive Design**: touch-friendly controls and layouts that work on Android and iOS browsers.
-- **Cross-Device Sync**: encrypted state is fetched and decrypted on any authenticated device.
-- **Production-Ready Ops**: Docker containerization, TLS 1.3/mTLS ready, GitHub Actions CI/CD.
+- **Zero-Knowledge, Post-Quantum Privacy**: client-side AES-256-GCM encryption with keys derived via Argon2id; ML-DSA-65 authentication and ML-KEM-768 key encapsulation protect sync and login.
+- **Strength & Cardio Tracking**: log weight/reps, distance, duration, heart rate, and calories.
+- **Workout Plans & Exercise Database**: reusable templates, custom exercises, and interactive exercise detail pages with records, charts, and a one-rep-max calculator.
+- **Active Workout Mode**: live timer, rest timers, warmup sets, mid-workout editing, and persistent state across page navigation.
+- **Local Mode**: try the full app instantly without an account; data stays on your device.
+- **Cross-Device Sync**: encrypted state syncs across authenticated devices when you enable cloud sync.
+- **Progressive Web App**: installable on mobile and desktop with an offline-capable service worker.
+- **Gamification**: XP, levels, badges, streaks, personal records, and tonnage tracking computed on the client.
 
 ## Architecture
 
 ```
-──────────────────────────────────────┐
-│           Browser (Client)           │
+───────────────────────────────────────┐
+│           Client (Device)            │
 │  ┌──────────────────────────────┐    │
 │  │  Argon2id key derivation     │    │
 │  │  ML-DSA / ML-KEM keypairs    │    │
 │  │  AES-256-GCM encrypt/decrypt │    │
-│  │  Gamification engine (XP,   │    │
+│  │  Gamification engine (XP,    │    │
 │  │  tonnage, progressive        │    │
 │  │  overload analytics)         │    │
 │  └──────────────────────────────┘    │
 └──────────────┬───────────────────────┘
                │ HTTPS / TLS 1.3
                ▼
-┌──────────────────────────────────────┐
-│        Node.js / Express API         │
-│  • PQC signature auth (ML-DSA-65)    │
-│  • Stores only public keys &         │
-│    encrypted payloads                │
-│  • No access to private keys/data      │
+┌─────────────────────────────────────┐
+│        Node.js / Express API        │
+│  • PQC signature auth (ML-DSA-65)   │
+│  • Stores only public keys &        │
+│    encrypted payloads               │
+│  • No access to private keys/data   │
 └─────────────────────────────────────┘
                │
                ▼
@@ -96,6 +83,25 @@ This platform flips the trust model. The server only stores **opaque, encrypted 
 | Database | PostgreSQL 16 |
 | Container | Docker, Docker Compose |
 | CI/CD | GitHub Actions |
+| Mobile Wrappers | Capacitor (iOS/Android) |
+| Desktop Wrappers | Tauri (Windows/Mac/Linux) |
+
+## Portfolio Ecosystem
+
+This project is part of a larger portfolio of security and DevOps tools:
+
+- **AI CI/CD Security Guardrail**: The `.github/workflows/ai-guardrail.yml` workflow generates an ESLint SARIF report from the actual ZK Fitness codebase and passes it to the reusable `samueladegnan/ai-cicd-security-guardrail@v1.0.0` action. The guardrail triages those findings with a deterministic mock provider by default, or a real LLM when an API key is configured. The latest triage output is committed automatically to `guardrail.html` and shown on the live portfolio as the **Security Report**.
+
+These integrations are documented here and are intended to show how the projects complement each other in a real-world portfolio.
+
+### Enabling Cross-Project Integrations
+
+The guardrail runs in a zero-cost mock mode by default. To upgrade to a real LLM triage, configure the following repository secret in GitHub:
+
+| Secret | Project | Purpose |
+|--------|---------|---------|
+| `AI_GUARD_PROVIDER` | AI CICD Security Guardrail | LLM provider: `mock` (default), `openai`, `anthropic`, or `gemini`. |
+| `AI_GUARD_API_KEY` | AI CICD Security Guardrail | API key for the selected real LLM provider (not needed for `mock`). |
 
 ## Quick Start
 
@@ -110,6 +116,7 @@ This platform flips the trust model. The server only stores **opaque, encrypted 
 ```bash
 git clone https://github.com/samueladegnan/zk-fitness-platform.git
 cd zk-fitness-platform
+npm install
 npm run install:backend
 ```
 
@@ -148,89 +155,13 @@ npm run dev:stop   # kills any process on ports 3000, 3001, and 5432
 
 ## Deploy the Backend
 
-GitHub Pages hosts only the static frontend. To enable authentication and encrypted sync, deploy the Node.js/Express backend with a Postgres database.
-
-| Component | Service | Plan |
-|---|---|---|
-| App hosting | [Render](https://render.com) web service | Free |
-| Database | [Neon](https://neon.tech) Postgres | Free |
-
-Free Render web services spin down after 15 minutes of inactivity. The first request after a cold start may take 30–60 seconds.
-
-### Step 1: Create the Neon database
-
-1. Sign in to [Neon](https://neon.tech) and create a new project.
-2. Create a database named `fitness_db`.
-3. Copy the **connection string**. It has the form:
-   ```text
-   postgresql://<user>:<password>@<host>.neon.tech/fitness_db?sslmode=require
-   ```
-4. Keep the `?sslmode=require` suffix. Store the connection string for Step 2.
-
-### Step 2: Deploy the backend to Render
-
-This repository includes `render.yaml`, a Render Blueprint.
-
-1. Push the repository to GitHub.
-2. In the Render dashboard, select **New +** > **Blueprint**.
-3. Connect the GitHub repository and choose the `main` branch.
-4. Render reads `render.yaml` and creates a web service named `zk-fitness-api`.
-5. Open the service's **Environment** tab and add the following variables:
-
-   | Variable | Value |
-   |---|---|
-   | `DATABASE_URL` | Neon connection string from Step 1 |
-   | `JWT_SECRET` | Strong random secret (see below) |
-   | `CLIENT_ORIGIN` | Your GitHub Pages origin, e.g. `https://<username>.github.io` |
-
-   Generate a secret with:
-
-   ```bash
-   node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-   ```
-
-   Paste the output into `JWT_SECRET`. Do not commit it.
-
-6. Redeploy if necessary. The `start:prod` command runs database migrations automatically.
-
-After deployment, the backend is available at the service URL Render provides. With the default service name in `render.yaml`, the URL is:
-
-```text
-https://zk-fitness-api.onrender.com/api
-```
-
-### Step 3: Point the frontend to the backend
-
-The GitHub Pages workflow injects the backend URL into `frontend/config.js` at deploy time.
-
-1. In GitHub, go to **Settings > Secrets and variables > Actions > Variables**.
-2. Add a repository variable named `ZK_API_BASE`.
-3. Set its value to the deployed backend root URL, for example:
-   ```text
-   https://zk-fitness-api.onrender.com/api
-   ```
-4. Redeploy GitHub Pages. Pushes to `main` trigger this automatically.
-
-For local development, leave `ZK_API_BASE` unset. The app falls back to `http://localhost:3000/api`.
-
-### Step 4: Configure CORS and cookies
-
-This step explains what the `CLIENT_ORIGIN` environment variable from Step 2 does. You do **not** set it in a different place.
-
-The backend uses `CLIENT_ORIGIN` to validate incoming requests and to decide how to set cookies. It must be the GitHub Pages origin (the host only, not the full repository path).
-
-| Setting | Example value |
-|---|---|
-| `CLIENT_ORIGIN` | `https://<username>.github.io` |
-
-Because the frontend and backend are on different origins, the backend sets cookies with `SameSite=None; Secure`. Both sites must use HTTPS, which is the default for both Render and GitHub Pages.
+To enable authentication and encrypted sync, deploy the backend to Render with a Neon Postgres database. See [`docs/DEPLOY.md`](docs/DEPLOY.md) for the full walkthrough.
 
 ## Troubleshooting
 
-- **Port 3000 already in use**: A previous Node process is still running. Run `npm run dev:stop`, or on Windows use `npx kill-port 3000`.
-- **CORS errors in development**: Make sure `NODE_ENV=development` is set (it is by default in `backend/.env.example`). In development, the API reflects the requesting origin.
-- **Argon2 not loading**: Ensure you ran `npm install` at the project root; this vendors `frontend/vendor/argon2.min.js`.
-- **Portfolio link broken locally**: The "Back to Portfolio" link uses `../index.html`. When you run a local dev server rooted directly in the `frontend/` directory, this link will 404. This is expected; it works correctly on the live GitHub Pages deployment where `frontend/` is a sub-folder of the site root. Serve the project root (e.g., `npx serve .` at the repository root) if you want the link to work locally.
+- **Port 3000 already in use**: Run `npm run dev:stop`, or on Windows use `npx kill-port 3000`.
+- **CORS errors in development**: Make sure `NODE_ENV=development` is set (it is the default in `backend/.env.example`).
+- **Argon2 not loading**: Run `npm install` at the project root to vendor `frontend/vendor/argon2.min.js`.
 
 ## API Overview
 
@@ -247,15 +178,15 @@ See `backend/server.js` for request/response schemas.
 
 1. The server never receives the user's password or any private key.
 2. The client derives deterministic seeds from the password with Argon2id + HKDF, then generates the user's post-quantum keypairs:
-   - **ML-DSA-65 signing key**: used to authenticate with the API; the public key is stored server-side, the private key never leaves the browser.
-   - **ML-KEM-768 key**: used to encapsulate the per-sync AES data key; the public key is stored server-side, the private key never leaves the browser.
+   - **ML-DSA-65 signing key**: used to authenticate with the API; the public key is stored server-side, the private key never leaves the device.
+   - **ML-KEM-768 key**: used to encapsulate the per-sync AES data key; the public key is stored server-side, the private key never leaves the device.
 3. The server stores only the public keys and the encrypted blob plus its KEM ciphertext.
 4. All transport is encrypted with TLS 1.3.
 5. The encrypted payload is opaque to the server and is never logged or inspected.
 
 ### Account & Bot Controls
 
-Registration requires solving a server-issued proof-of-work challenge in the browser, which raises the cost for automated account creation. Additional protections include:
+Registration requires solving a server-issued proof-of-work challenge on the client, which raises the cost for automated account creation. Additional protections include:
 
 - A hidden honeypot field that rejects submissions filled by bots.
 - Stricter per-IP rate limiting on registration.
@@ -264,7 +195,7 @@ Registration requires solving a server-issued proof-of-work challenge in the bro
 
 ### Current Status
 
-This project is under active development and has not been released. The web app and PWA are live portfolio demonstrations, not a production product. The backend can be self-hosted or deployed to Render for testing. Encrypted data is now persisted locally with IndexedDB, so workouts survive browser restarts and work offline.
+This is a live portfolio demonstration of a zero-knowledge fitness platform. The web app and PWA are feature-complete and publicly deployed, while the backend can be self-hosted or deployed to Render for testing. Encrypted data is persisted locally with IndexedDB, so workouts survive app restarts and work offline.
 
 ## Workout Tracking Features
 
@@ -291,39 +222,53 @@ This project is under active development and has not been released. The web app 
 
 ## Monetization
 
-ZK Fitness is **free to use locally** with no ads. You keep full access to workout tracking, plans, exercise history, charts, and the one-rep-max calculator on any device.
+Billing is optional and completely hidden by default. Local mode is free and includes every workout feature. Cloud sync is the only paid feature, because it is the only part that incurs server costs. See [`docs/MONETIZATION.md`](docs/MONETIZATION.md) for pricing, refund policy, and Stripe setup.
 
-The only paid feature is **encrypted cloud sync** across devices, because that is the only part that incurs server costs:
+## Release Platforms
 
-| Plan | Price | Best for |
-|---|---|---|
-| Monthly | $3.99 | Short-term or trial users |
-| Yearly | $29.99 | Regular users (save 37%) |
-| Lifetime | $79.99 | Long-term users who want to pay once |
+ZK Fitness is built as a web-first PWA, so it can be shipped to every major platform with minimal additional configuration.
 
-Payments are processed by Stripe. The backend stores only subscription metadata; workout data remains encrypted and unreadable by the server.
+### Web / PWA (GitHub Pages)
 
-If you cancel, your local data and all workout features stay fully usable. Cloud sync simply stops until you resubscribe.
+1. Push to `main`.
+2. GitHub Actions runs `.github/workflows/pages.yml` and deploys to `https://<username>.github.io/zk-fitness-platform/`.
+3. Users visit the site and tap **Add to Home Screen** to install the PWA.
 
-### Enabling billing (optional)
+### iOS & Android (Capacitor)
 
-If you skip this step, the app still works fully offline; the subscription card simply will not appear.
+1. Add Capacitor platforms (run once):
+   ```bash
+   npm install -D @capacitor/cli @capacitor/core @capacitor/ios @capacitor/android
+   npx cap add ios
+   npx cap add android
+   ```
+2. Sync the web build into the native projects:
+   ```bash
+   npx cap sync
+   ```
+3. Open and publish:
+   - **iOS**: `npx cap open ios`, then archive and upload via Xcode to App Store Connect.
+   - **Android**: `npx cap open android`, then generate a signed AAB and upload to Google Play Console.
 
-1. In your [Stripe Dashboard](https://dashboard.stripe.com), create three products/prices:
-   - **ZK Fitness Monthly** at $3.99 USD, recurring monthly
-   - **ZK Fitness Yearly** at $29.99 USD, recurring yearly
-   - **ZK Fitness Lifetime** at $79.99 USD, one-time payment
-2. Add these environment variables to your backend host:
-   | Variable | Value |
-   |---|---|
-   | `STRIPE_SECRET_KEY` | `sk_live_...` from Stripe |
-   | `STRIPE_WEBHOOK_SECRET` | Webhook signing secret |
-   | `STRIPE_PRICE_MONTHLY` | Price ID for monthly plan |
-   | `STRIPE_PRICE_YEARLY` | Price ID for yearly plan |
-   | `STRIPE_PRICE_LIFETIME` | Price ID for lifetime plan |
-   | `STRIPE_SUCCESS_URL` | `https://<username>.github.io/zk-fitness-platform/frontend/` |
-   | `STRIPE_CANCEL_URL` | Same as above |
-3. Add a webhook endpoint for `checkout.session.completed` pointing to `https://your-api.onrender.com/api/billing/webhook`.
+### Desktop (Tauri)
+
+1. Install Rust and the Tauri CLI:
+   ```bash
+   npm install -D @tauri-apps/cli
+   ```
+2. Build release artifacts:
+   ```bash
+   npm run desktop:build
+   ```
+3. Distribute the generated installers from `src-tauri/target/release/bundle/` (`.dmg`, `.msi`, `.AppImage`, etc.).
+
+### Docker (self-hosted)
+
+1. Build the backend image:
+   ```bash
+   docker build -t zk-fitness-api ./backend
+   ```
+2. Push to a registry of your choice, or run locally with the provided `docker-compose.yml`.
 
 ## Roadmap
 

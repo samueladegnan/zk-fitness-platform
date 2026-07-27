@@ -17,6 +17,7 @@
       <li><a class="active" href="./" aria-current="page">Overview</a></li>
       <li><a href="./demo.html">Live Demo</a></li>
       <li><a href="./architecture.html">Architecture</a></li>
+      <li><a href="./guardrail.html">Security Report</a></li>
       <li>
         <a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform" aria-label="View source on GitHub">GitHub</a>
       </li>
@@ -25,14 +26,14 @@
   </nav>
   <header class="page-header">
     <h1 class="project-name">ZK Fitness</h1>
-    <p class="project-tagline">Keep your workout history private. Encrypted in your browser, readable only by you.</p>
+    <p class="project-tagline">Keep your workout history private. Encrypted on your device, readable only by you.</p>
     <a class="btn" href="./frontend/">Launch Live Demo</a>
   </header>
 
   <main id="main-content" class="main-content">
     <p>
       <a href="https://github.com/samueladegnan/zk-fitness-platform/actions/workflows/ci.yml"><img src="https://github.com/samueladegnan/zk-fitness-platform/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-      <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-18%2B-green.svg" alt="Node 18+" /></a>
+      <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-20%2B-green.svg" alt="Node 20+" /></a>
       <a href="https://github.com/samueladegnan/zk-fitness-platform/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
     </p>
 
@@ -40,7 +41,7 @@
     <p><strong>ZK Fitness</strong> is a privacy-first, full-stack strength training and cardio tracking platform. It uses client-side encryption and a zero-knowledge cloud architecture to ensure your workout data remains entirely your own.</p>
 
     <h2>How It Works</h2>
-    <p>Using the Web Crypto API, all data is encrypted directly in your browser with AES-256-GCM before it touches the network. The backend server only stores opaque blobs it cannot decrypt. Key derivation is handled by Argon2id, providing strong protection against brute-force attacks.</p>
+    <p>Using the Web Crypto API, all data is encrypted directly on your device with AES-256-GCM before it touches the network. The backend server only stores opaque blobs it cannot decrypt. Key derivation is handled by Argon2id, providing strong protection against brute-force attacks.</p>
     <p>Authentication is performed with <strong>ML-DSA-65 (Dilithium)</strong> signatures, and each sync wraps a fresh AES data key using <strong>ML-KEM-768 (Kyber)</strong>. These NIST-standard post-quantum algorithms protect the platform against future cryptographically relevant quantum computers.</p>
 
     <h2>Key Features</h2>
@@ -61,12 +62,7 @@
   <footer class="site-footer">
     <div class="site-footer__inner">
       <p class="site-footer__tagline">Privacy-first strength &amp; cardio tracking with client-side encryption.</p>
-      <p class="site-footer__links">
-        <a href="https://samueladegnan.github.io/">Portfolio</a>
-        <span aria-hidden="true">&bull;</span>
-        <a href="https://github.com/samueladegnan/zk-fitness-platform">GitHub</a>
-      </p>
-      <p class="site-footer__copyright">&copy; 2026 <a href="https://github.com/samueladegnan">Samuel Degnan</a></p>
+      <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </div>
   </footer>
 </body>

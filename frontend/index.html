@@ -46,7 +46,7 @@
       <section id="auth-view" class="view">
         <div class="auth-card">
           <h1>Privacy-First Strength Training</h1>
-          <p class="subtitle">Your workout log is encrypted in your browser. No one else can read it, not even us.</p>
+          <p class="subtitle">Your workout log is encrypted on your device. No one else can read it, not even us.</p>
           <form id="auth-form">
             <label for="username">Username</label>
             <input id="username" name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" />
@@ -62,9 +62,9 @@
               <button type="submit" id="auth-btn">Register</button>
               <button type="button" id="toggle-mode" class="link">Already have an account? Log in</button>
             </div>
-            <div class="demo-actions">
-              <button type="button" id="demo-mode-btn" class="secondary">👋 Try Demo Mode</button>
-              <p class="muted small">No account needed. Your demo data lives right in your browser.</p>
+            <div class="local-actions">
+              <button type="button" id="local-trial-btn" class="secondary">👋 Try without an account</button>
+              <p class="muted small">No account needed. Your data stays on your device, so you can try everything right now.</p>
             </div>
             <p id="auth-error" class="error" role="status"></p>
           </form>
@@ -182,22 +182,20 @@
 
     <canvas id="confetti-canvas" aria-hidden="true"></canvas>
 
-    <!-- Demo Security Modal -->
-    <div id="demo-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="demo-modal-title">
+    <!-- Local Mode Security Modal -->
+    <div id="local-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="local-modal-title">
       <div class="modal-content">
-        <h2 id="demo-modal-title">Zero-Knowledge Security Demo</h2>
-        <p>Before you begin, here is how this app protects your data:</p>
+        <h2 id="local-modal-title">Your data stays yours</h2>
+        <p>Workouts are encrypted on this device before they go anywhere. Even the server cannot read them.</p>
         <ul>
-          <li><strong>Zero-Knowledge Architecture:</strong> We never know your password. Keys are derived client-side using Argon2id.</li>
-          <li><strong>Post-Quantum Authentication:</strong> Login uses an ML-DSA-65 signature. The server stores only your public key.</li>
-          <li><strong>Post-Quantum Key Encapsulation:</strong> Every sync uses ML-KEM-768 to wrap a fresh AES-256-GCM data key. The server stores only the ciphertext.</li>
-          <li><strong>End-to-End Encryption:</strong> Every workout is encrypted in your browser with AES-256-GCM.</li>
-          <li><strong>Server Cannot Read Data:</strong> The backend only stores public keys and random-looking ciphertext. It has no access to plaintext.</li>
-          <li><strong>Demo Mode is Local:</strong> No server is used. Your data is encrypted and stored only in your browser's local storage.</li>
+          <li>End-to-end on-device encryption: your password and private keys never leave this device.</li>
+          <li>AES-256-GCM protects your local data; the symmetric key is derived from your password with Argon2id.</li>
+          <li>If you later enable cloud sync, only post-quantum public key material (ML-DSA-65 + ML-KEM-768) is sent to the server for authentication and key encapsulation.</li>
+          <li>Argon2id key derivation runs locally, hardening your password against brute-force attacks.</li>
         </ul>
         <div class="modal-actions">
-          <button id="start-demo-confirm-btn" type="button">Start Demo</button>
-          <button id="cancel-demo-btn" class="secondary" type="button">Cancel</button>
+          <button id="start-local-confirm-btn" type="button">Continue</button>
+          <button id="cancel-local-btn" class="secondary" type="button">Cancel</button>
         </div>
       </div>
     </div>
@@ -207,7 +205,7 @@
       <div class="modal-content loading-modal-content">
         <div class="loading-spinner" aria-hidden="true"></div>
         <h2 id="loading-modal-title">Warming up…</h2>
-        <p id="loading-modal-message">The first post-quantum key generation can take a few seconds. Please hang tight.</p>
+        <p id="loading-modal-message">The first post-quantum key generation can take a few seconds. If the server has been idle, waking it up can take up to a minute. Please hang tight.</p>
       </div>
     </div>
 
@@ -240,12 +238,7 @@
 
     <footer class="app-footer">
       <p class="app-footer__tagline">Privacy-first strength &amp; cardio tracking with client-side encryption.</p>
-      <p class="app-footer__links">
-        <a href="https://samueladegnan.github.io/">Portfolio</a>
-        <span aria-hidden="true">&bull;</span>
-        <a href="https://github.com/samueladegnan/zk-fitness-platform">GitHub</a>
-      </p>
-      <p class="app-footer__copyright">&copy; 2026 <a href="https://github.com/samueladegnan">Samuel Degnan</a></p>
+      <p class="app-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </footer>
   </div>
 </body>

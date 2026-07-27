@@ -59,6 +59,21 @@ function isPaidSubscription(status) {
   return ['active', 'trialing'].includes(status);
 }
 
+async function getLatestPaymentIntent(customerId) {
+  const list = await getStripe().paymentIntents.list({
+    customer: customerId,
+    limit: 1,
+  });
+  return list.data[0] || null;
+}
+
+async function createRefund({ paymentIntentId, chargeId }) {
+  const params = {};
+  if (paymentIntentId) params.payment_intent = paymentIntentId;
+  else if (chargeId) params.charge = chargeId;
+  return getStripe().refunds.create(params);
+}
+
 module.exports = {
   getStripe,
   getPriceIds,
@@ -67,4 +82,6 @@ module.exports = {
   createBillingPortalSession,
   retrieveCheckoutSession,
   isPaidSubscription,
+  getLatestPaymentIntent,
+  createRefund,
 };

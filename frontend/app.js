@@ -3,7 +3,7 @@
  *
  * - Derives auth and encryption keys from the password using Argon2id + HKDF.
  * - Encrypts/decrypts workout data with Web Crypto API (AES-256-GCM).
- * - Runs the gamification engine (XP, tonnage, streak, levels, badges, PRs) in the browser.
+ * - Runs the gamification engine (XP, tonnage, streak, levels, badges, PRs) on the client.
  * - NEW: Demo/portfolio mode, empty workouts, rest +/-30s, warmup helper,
  *        barbell math, confetti, sounds, plan editor, and history editing.
  */
@@ -29,6 +29,13 @@ import {
 } from './lib/fitness.js';
 import { getExerciseById, EXERCISE_CATALOG } from './exercises.js';
 import { saveLocalData, loadLocalData, clearLocalData } from './lib/db.js';
+import {
+  createSet as createSetModel,
+  createWorkoutExercise as createWorkoutExerciseModel,
+  toggleSetStatus,
+  finalizeWorkout,
+  applyPastWorkoutChanges,
+} from './lib/workout.js';
 
 // API_BASE can be overridden for production by setting window.ZK_API_BASE
 // (e.g. via an inline <script> in index.html or a CI build step).
@@ -38,13 +45,13 @@ const API_BASE =
     ? '/api'
     : 'http://localhost:3000/api');
 
-// In-memory session state (never persists to disk unencrypted except in demo mode)
+// In-memory session state (never persists to disk unencrypted except in local mode)
 let session = {
   username: null,
   token: null,
   dsaKeyPair: null,
   kemKeyPair: null,
-  encKey: null, // demo mode only
+  encKey: null, // local mode only
   salt: null,
   data: {
     plans: [],
@@ -57,7 +64,7 @@ let session = {
 
 let isRegisterMode = true;
 let isAuthenticated = false;
-let isDemoMode = false;
+let isLocalMode = false;
 let billingEnabled = false;
 let subscription = { status: 'inactive', type: null, isPaid: false };
 let globalTimerInterval = null;
@@ -113,9 +120,9 @@ function resetApiFailureState() {
   apiFailureState = { count: 0, timer: null, lastErr: null, onFlush: null };
 }
 
-// ─── Demo Mode Constants ────────────────────────────────────────────────────
-const DEMO_KEY_BASE64 = 'demo-demo-demo-demo-demo-demo-demo-demo'; // 32 bytes placeholder handled below
-const DEMO_STORAGE_KEY = 'zkfitness_demo_data';
+// ─── Local Mode Constants ───────────────────────────────────────────────────
+const LOCAL_KEY_BASE64 = 'local-local-local-local-local-local-local-local'; // 32 bytes placeholder handled below
+const LOCAL_STORAGE_KEY = 'zkfitness_local_data';
 
 // Callback for the shared security/demonstration modal.
 let securityModalCallback = null;
@@ -215,8 +222,8 @@ async function solvePoW(authKeyHash, nonce, difficulty) {
   }
 }
 
-async function getDemoEncKey() {
-  // Demo mode uses a fixed, non-secret key because data lives only in localStorage.
+async function getLocalEncKey() {
+  // Local mode uses a fixed, non-secret key because data lives only in localStorage.
   const raw = new Uint8Array(32);
   for (let i = 0; i < raw.length; i++) raw[i] = i;
   return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
@@ -277,12 +284,12 @@ function isBackendLikelyConfigured() {
 }
 
 async function api(path, options = {}) {
-  if (isDemoMode) {
-    return demoApi(path, options);
+  if (isLocalMode) {
+    return localApi(path, options);
   }
 
   if (!isBackendLikelyConfigured()) {
-    throw new Error('Backend not configured. The live demo requires a deployed API; please use Demo Mode for now.');
+    throw new Error('Backend not configured. Local mode works without a backend; please use Try without an account for now.');
   }
 
   let res;
@@ -317,7 +324,7 @@ async function api(path, options = {}) {
   return body;
 }
 
-async function demoApi(path, options) {
+async function localApi(path, options) {
   await new Promise((r) => setTimeout(r, 30)); // Simulate network latency
   const method = options.method || 'GET';
   if (path === '/sync' && method === 'GET') {
@@ -327,13 +334,13 @@ async function demoApi(path, options) {
   if (path === '/sync' && method === 'PUT') {
     const body = JSON.parse(options.body);
     await saveLocalData('demo', body.encryptedBlob, body.kemCiphertext || '');
-    return { message: 'Demo sync stored' };
+    return { message: 'Local sync stored' };
   }
   if (path === '/auth/challenge') {
     return { nonce: 'demo-challenge-nonce', difficulty: 4 };
   }
   if (path.startsWith('/auth/')) {
-    return { token: 'demo-token', username: 'Demo User' };
+    return { token: 'local-token', username: 'Local User' };
   }
   return {};
 }
@@ -386,20 +393,7 @@ function getExercise(id) {
 
 function createSet(type = 'working', exerciseId = null) {
   const last = type === 'working' && exerciseId ? getLastSetValues(exerciseId) : null;
-  return {
-    id: crypto.randomUUID(),
-    type,
-    weight: last ? last.weight : '',
-    reps: last ? last.reps : '',
-    rpe: last ? last.rpe : '',
-    // Cardio fields
-    distance: last ? last.distance : '',
-    durationMinutes: last ? last.durationMinutes : '',
-    heartRate: last ? last.heartRate : '',
-    calories: last ? last.calories : '',
-    done: false,
-    xp: 0,
-  };
+  return createSetModel(type, last);
 }
 
 function renderSetFields(exercise, set, exIndex, setIndex, isCardio) {
@@ -440,14 +434,14 @@ function createWorkoutExercise(exerciseId, targetSets = 3, targetReps = 8, restS
   const ex = getExercise(exerciseId);
   restSeconds = restSeconds || ex.defaultRestSeconds || session.data.preferences.defaultRestSeconds;
   const last = getLastExerciseSettings(exerciseId);
-  return {
-    id: crypto.randomUUID(),
+  const lastSets = last && last.sets.length > 0 ? last.sets.length : targetSets;
+  return createWorkoutExerciseModel(
     exerciseId,
-    targetSets: last && last.sets.length > 0 ? last.sets.length : targetSets,
-    targetReps: last ? last.targetReps : targetReps,
-    restSeconds: last ? last.restSeconds : restSeconds,
-    sets: [createSet('working', exerciseId)],
-  };
+    lastSets,
+    last ? last.targetReps : targetReps,
+    last ? last.restSeconds : restSeconds,
+    last ? getLastSetValues(exerciseId) : null,
+  );
 }
 
 function generateWarmupSets(workingWeight) {
@@ -801,9 +795,9 @@ async function performPasswordAuth(username, password, inviteCode) {
 
 function openSecurityModal(label, callback) {
   securityModalCallback = callback;
-  const btn = $('start-demo-confirm-btn');
+  const btn = $('start-local-confirm-btn');
   if (btn) btn.textContent = label;
-  const modal = $('demo-modal');
+  const modal = $('local-modal');
   if (modal) modal.classList.remove('hidden');
 }
 
@@ -881,7 +875,7 @@ function initAuthUI() {
     }
 
     const actionText = isRegisterMode ? 'Creating your account' : 'Logging you in';
-    showLoadingModal(`${actionText}. The first time can take a few seconds. Please wait.`);
+    showLoadingModal(`${actionText}. If this is the first request in a while, the server may need up to a minute to wake up. Please wait.`);
 
     try {
       await performPasswordAuth(username, password, inviteCode);
@@ -892,17 +886,17 @@ function initAuthUI() {
     }
   });
 
-  const demoBtn = $('demo-mode-btn');
-  if (demoBtn) {
-    demoBtn.addEventListener('click', () => {
-      openSecurityModal('Start Demo', startDemoMode);
+  const localTrialBtn = $('local-trial-btn');
+  if (localTrialBtn) {
+    localTrialBtn.addEventListener('click', () => {
+      openSecurityModal('Try without an account', startLocalTrial);
     });
   }
 
-  const confirmDemoBtn = $('start-demo-confirm-btn');
-  if (confirmDemoBtn) {
-    confirmDemoBtn.addEventListener('click', () => {
-      const modal = $('demo-modal');
+  const confirmLocalBtn = $('start-local-confirm-btn');
+  if (confirmLocalBtn) {
+    confirmLocalBtn.addEventListener('click', () => {
+      const modal = $('local-modal');
       if (modal) modal.classList.add('hidden');
       if (securityModalCallback) {
         securityModalCallback();
@@ -911,10 +905,10 @@ function initAuthUI() {
     });
   }
 
-  const cancelDemoBtn = $('cancel-demo-btn');
-  if (cancelDemoBtn) {
-    cancelDemoBtn.addEventListener('click', () => {
-      const modal = $('demo-modal');
+  const cancelLocalBtn = $('cancel-local-btn');
+  if (cancelLocalBtn) {
+    cancelLocalBtn.addEventListener('click', () => {
+      const modal = $('local-modal');
       if (modal) modal.classList.add('hidden');
     });
   }
@@ -936,12 +930,12 @@ async function loadSubscriptionStatus() {
   }
 }
 
-async function startDemoMode() {
+async function startLocalTrial() {
   try {
-    isDemoMode = true;
+    isLocalMode = true;
     session.username = 'demo';
-    session.token = 'demo-token';
-    session.encKey = await getDemoEncKey();
+    session.token = 'local-token';
+    session.encKey = await getLocalEncKey();
     session.salt = new Uint8Array(32);
 
     const res = await api('/auth/login', {
@@ -955,7 +949,7 @@ async function startDemoMode() {
     await loadSync();
     showView('dashboard-view');
     renderDashboard();
-    showToast('Demo mode active. Your data is stored locally', 'info');
+    showToast('Local mode active. Your data is stored on this device', 'info');
   } catch (err) {
     $('auth-error').textContent = err.message;
   }
@@ -1040,8 +1034,7 @@ async function logout() {
   };
   stopGlobalTimer();
   clearInterval(restTimerInterval);
-  isAuthenticated = false;
-  isDemoMode = false;
+  isAuthenticated = false;    isLocalMode = false;
   billingEnabled = false;
   subscription = { status: 'inactive', type: null, isPaid: false };
   renderNav();
@@ -1069,6 +1062,7 @@ function renderDashboard() {
     const statusText = isPaid
       ? `Active (${subscription.type === 'lifetime' ? 'Lifetime' : 'Subscription'})`
       : 'Free (local only)';
+    const isRefundable = isPaid && (subscription.type === 'yearly' || subscription.type === 'lifetime');
     subCard.innerHTML = `
       <h2>Subscription</h2>
       <p class="subscription-status">${statusText}</p>
@@ -1077,14 +1071,16 @@ function renderDashboard() {
         : 'All workout features are free locally. Upgrade to sync across devices.'}</p>
       <div class="subscription-actions">
         ${isPaid
-          ? `<button id="manage-subscription" class="secondary">Manage Billing</button>`
+          ? `<button id="manage-subscription" class="secondary">Manage Billing</button>${isRefundable ? ' <button id="request-refund" class="secondary">Request Refund</button>' : ''}`
           : `<button id="subscribe-btn" class="btn-start">Upgrade</button>`}
       </div>
     `;
     const manageBtn = $('manage-subscription');
     const subscribeBtn = $('subscribe-btn');
+    const refundBtn = $('request-refund');
     if (manageBtn) manageBtn.onclick = openBillingPortal;
     if (subscribeBtn) subscribeBtn.onclick = openPricingModal;
+    if (refundBtn) refundBtn.onclick = requestRefund;
   }
 
   const stats = computeStats(session.data.workouts, isCardioExercise, session.data.preferences.units);
@@ -1181,7 +1177,7 @@ function openPricingModal() {
           <span>Permanent access</span>
         </button>
       </div>
-      <p class="muted small">Payments are processed securely by Stripe. No ads, ever.</p>
+      <p class="muted small">Payments are processed securely by Stripe. Yearly and Lifetime plans include a 14-day money-back guarantee.</p>
     `;
   }
   if (confirmBtn) {
@@ -1226,6 +1222,24 @@ async function openBillingPortal() {
   try {
     const res = await api('/billing/portal', { method: 'POST' });
     window.location.href = res.url;
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function requestRefund() {
+  const confirmed = await openAppModal({
+    title: 'Request a refund?',
+    message: 'Yearly and Lifetime plans are eligible for a full refund within 14 days of purchase. This will cancel your subscription and return you to local mode.',
+    confirmText: 'Request Refund',
+    cancelText: 'Keep Subscription',
+  });
+  if (!confirmed) return;
+  try {
+    const res = await api('/billing/refund', { method: 'POST' });
+    showToast(res.message, 'info');
+    await loadSubscriptionStatus();
+    renderDashboard();
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2024,20 +2038,15 @@ function renderActiveWorkout(pastWorkoutId) {
     btn.addEventListener('click', () => {
       const exIdx = Number(btn.dataset.idx);
       const setIdx = Number(btn.dataset.set);
-      const set = workout.exercises[exIdx].sets[setIdx];
-      set.weight = set.weight === '' ? 0 : Number(set.weight);
-      set.reps = set.reps === '' ? 0 : Number(set.reps);
-      set.distance = set.distance === '' ? 0 : Number(set.distance);
-      set.durationMinutes = set.durationMinutes === '' ? 0 : Number(set.durationMinutes);
-      set.heartRate = set.heartRate === '' ? 0 : Number(set.heartRate);
-      set.calories = set.calories === '' ? 0 : Number(set.calories);
-      set.done = !set.done;
-      set.xp = set.done ? xpForSet(set) : 0;
+      const exercise = workout.exercises[exIdx];
+      // Toggle completion without forcing empty values to 0, so users can
+      // mark a set done and still come back to edit weight/reps later.
+      exercise.sets[setIdx] = toggleSetStatus(exercise.sets[setIdx]);
       persist();
       renderActiveWorkout(pastWorkoutId);
       if (!isPastEdit) {
-        if (set.done) {
-          startRestTimer(exIdx, workout.exercises[exIdx].restSeconds);
+        if (exercise.sets[setIdx].done) {
+          startRestTimer(exIdx, exercise.restSeconds);
         } else if (workout.restExerciseIndex === exIdx) {
           skipRestTimer();
         }
@@ -2400,56 +2409,14 @@ function renderRestTimer(exIdx) {
 async function finishWorkout() {
   const workout = getActiveWorkout();
   if (!workout) return;
-  workout.endTime = Date.now();
-  workout.durationSeconds = Math.floor((workout.endTime - workout.startTime) / 1000);
 
-  workout.exercises.forEach((ex) => {
-    const cardio = isCardioExercise(ex.exerciseId);
-    ex.sets = ex.sets
-      .filter((s) => {
-        if (cardio) return s.durationMinutes !== '' && Number(s.durationMinutes) > 0;
-        return s.weight !== '' && s.reps !== '' && Number(s.weight) > 0 && Number(s.reps) > 0;
-      })
-      .map((s) => ({
-        ...s,
-        weight: Number(s.weight),
-        reps: Number(s.reps),
-        distance: Number(s.distance),
-        durationMinutes: Number(s.durationMinutes),
-        heartRate: Number(s.heartRate),
-        calories: Number(s.calories),
-        xp: xpForSet(s),
-        done: true,
-      }));
-  });
-
-  const dropped = workout.exercises.reduce((count, ex) => {
-    const cardio = isCardioExercise(ex.exerciseId);
-    const invalid = ex.sets.filter((s) => {
-      if (cardio) return s.durationMinutes === '' || Number(s.durationMinutes) <= 0;
-      return s.weight === '' || s.reps === '' || Number(s.weight) <= 0 || Number(s.reps) <= 0;
-    }).length;
-    return count + invalid;
-  }, 0);
-  if (dropped > 0) {
-    const confirmed = await openAppModal({
-      title: 'Incomplete Sets',
-      message: `${dropped} set(s) have missing weight or reps and will be discarded. Finish anyway?`,
-      confirmText: 'Finish Anyway',
-      cancelText: 'Cancel',
-    });
-    if (!confirmed) return;
-  }
-
-  workout.exercises = workout.exercises.filter((ex) => ex.sets.length > 0);
   if (workout.exercises.length === 0) {
-    showToast('Add at least one completed set before finishing the workout.', 'error');
+    showToast('Add at least one exercise before finishing the workout.', 'error');
     return;
   }
-  workout.setsCount = workout.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
-  workout.xp = xpForWorkout(workout.exercises.flatMap((ex) => ex.sets));
 
-  session.data.workouts.unshift(workout);
+  const finished = finalizeWorkout(workout, isCardioExercise);
+  session.data.workouts.unshift(finished);
   clearActiveWorkout();
   stopGlobalTimer();
   clearInterval(restTimerInterval);
@@ -2461,28 +2428,9 @@ async function finishWorkout() {
 }
 
 function savePastWorkoutChanges(workout) {
-  workout.exercises.forEach((ex) => {
-    const cardio = isCardioExercise(ex.exerciseId);
-    ex.sets = ex.sets
-      .filter((s) => {
-        if (cardio) return s.durationMinutes !== '' && Number(s.durationMinutes) > 0;
-        return s.weight !== '' && s.reps !== '' && Number(s.weight) > 0 && Number(s.reps) > 0;
-      })
-      .map((s) => ({
-        ...s,
-        weight: Number(s.weight),
-        reps: Number(s.reps),
-        distance: Number(s.distance),
-        durationMinutes: Number(s.durationMinutes),
-        heartRate: Number(s.heartRate),
-        calories: Number(s.calories),
-        xp: xpForSet(s),
-        done: true,
-      }));
-  });
-  workout.exercises = workout.exercises.filter((ex) => ex.sets.length > 0);
-  const idx = session.data.workouts.findIndex((w) => w.id === workout.id);
-  if (workout.exercises.length === 0) {
+  const updated = applyPastWorkoutChanges(workout);
+  const idx = session.data.workouts.findIndex((w) => w.id === updated.id);
+  if (updated.exercises.length === 0) {
     if (idx >= 0) {
       session.data.workouts.splice(idx, 1);
       syncDataImmediate();
@@ -2491,11 +2439,9 @@ function savePastWorkoutChanges(workout) {
     renderHistory();
     return;
   }
-  workout.setsCount = workout.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
-  workout.xp = xpForWorkout(workout.exercises.flatMap((ex) => ex.sets));
 
   if (idx >= 0) {
-    session.data.workouts[idx] = workout;
+    session.data.workouts[idx] = updated;
   }
   syncDataImmediate();
   showView('history-view');
@@ -2867,7 +2813,7 @@ async function loadSync() {
     if (local && local.encryptedBlob) {
       const encrypted = JSON.parse(local.encryptedBlob);
       if (local.kemCiphertext) encrypted.kemCiphertext = local.kemCiphertext;
-      const key = isDemoMode ? session.encKey : session.kemKeyPair.secretKey;
+      const key = isLocalMode ? session.encKey : session.kemKeyPair.secretKey;
       localData = await decryptData(encrypted, key);
     }
   } catch (localErr) {
@@ -2880,10 +2826,10 @@ async function loadSync() {
     if (res.exists && res.encryptedBlob) {
       const encrypted = JSON.parse(res.encryptedBlob);
       if (res.kemCiphertext) encrypted.kemCiphertext = res.kemCiphertext;
-      if (!isDemoMode && !encrypted.kemCiphertext && !session.kemKeyPair) {
+      if (!isLocalMode && !encrypted.kemCiphertext && !session.kemKeyPair) {
         throw new Error('No KEM keypair available to decrypt sync data.');
       }
-      const key = isDemoMode ? session.encKey : session.kemKeyPair.secretKey;
+      const key = isLocalMode ? session.encKey : session.kemKeyPair.secretKey;
       cloudData = await decryptData(encrypted, key);
       // Keep the local copy in sync without re-encrypting.
       await saveLocalData(session.username || 'demo', res.encryptedBlob, res.kemCiphertext || '');
@@ -2919,13 +2865,13 @@ async function loadSync() {
   if (getActiveWorkout()) startGlobalTimer();
 
   if (!localData && !cloudData) {
-    if (status) status.textContent = isDemoMode ? 'Starting fresh demo.' : 'No prior sync found. Starting fresh.';
+    if (status) status.textContent = isLocalMode ? 'Starting fresh local session.' : 'No prior sync found. Starting fresh.';
   }
 }
 
 async function persistEncryptedLocal() {
   session.data.updatedAt = Date.now();
-  const encrypted = isDemoMode
+  const encrypted = isLocalMode
     ? await encryptData(session.data, session.encKey)
     : await encryptData(session.data, session.kemKeyPair.publicKey);
   await saveLocalData(session.username || 'demo', JSON.stringify({ iv: encrypted.iv, ciphertext: encrypted.ciphertext }), encrypted.kemCiphertext || 'demo-kem-ciphertext-placeholder');
@@ -2938,13 +2884,12 @@ function scheduleSync() {
 
 async function performSync() {
   syncTimeout = null;
-  const status = $('sync-status');
-  if (status) status.textContent = isDemoMode ? 'Saving demo data...' : 'Syncing encrypted state...';
+  const status = $('sync-status');    if (status) status.textContent = isLocalMode ? 'Saving local data...' : 'Syncing encrypted state...';
 
   try {
     // Always keep an encrypted local copy first.
     await persistEncryptedLocal();
-    if (status) status.textContent = isDemoMode ? 'Demo data saved locally.' : 'Encrypted state saved locally.';
+    if (status) status.textContent = isLocalMode ? 'Local data saved.' : 'Encrypted state saved locally.';
   } catch (localErr) {
     if (status) status.textContent = 'Local save failed.';
     showToast('Failed to save data locally.', 'error');
@@ -2953,12 +2898,12 @@ async function performSync() {
 
   // Attempt cloud sync when the network is available.
   if (!navigator.onLine) {
-    if (status) status.textContent = isDemoMode ? 'Demo data saved locally.' : 'Offline. Encrypted state saved locally; will sync when online.';
+    if (status) status.textContent = isLocalMode ? 'Local data saved.' : 'Offline. Encrypted state saved locally; will sync when online.';
     return;
   }
 
   try {
-    const encrypted = isDemoMode
+    const encrypted = isLocalMode
       ? await encryptData(session.data, session.encKey)
       : await encryptData(session.data, session.kemKeyPair.publicKey);
     await api('/sync', {
@@ -2968,7 +2913,7 @@ async function performSync() {
         kemCiphertext: encrypted.kemCiphertext || 'demo-kem-ciphertext-placeholder',
       }),
     });
-    if (status) status.textContent = isDemoMode ? 'Demo data saved locally.' : 'Encrypted state synced successfully.';
+    if (status) status.textContent = isLocalMode ? 'Local data saved.' : 'Encrypted state synced successfully.';
   } catch (err) {
     reportApiError(err, (failure) => {
       if (status) status.textContent = `Sync failed: ${failure.message}. Saved locally for now.`;
@@ -2986,7 +2931,7 @@ async function syncDataImmediate() {
   await performSync();
 }
 
-// Retry cloud sync whenever the browser comes back online.
+// Retry cloud sync whenever the device comes back online.
 window.addEventListener('online', () => {
   if (isAuthenticated) {
     syncDataImmediate().catch((err) => console.error('Online sync retry failed:', err));
