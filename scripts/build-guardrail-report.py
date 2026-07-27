@@ -143,7 +143,7 @@ def main() -> None:
   </nav>
 
   <header class="page-header">
-    <h1 class="project-name">Security Report</h1>
+    <h1 class="project-name">ZK Fitness</h1>
     <p class="project-tagline">Latest AI CICD Security Guardrail triage output for ZK Fitness.</p>
     <a class="btn" href="./frontend/">Launch Live Demo</a>
   </header>

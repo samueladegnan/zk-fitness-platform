@@ -22,6 +22,9 @@ Thumbs.db
 # Docker data
 pgdata/
 
+# Generated static site
+site/
+
 # Playwright / e2e
 /test-results/
 /playwright-report/
