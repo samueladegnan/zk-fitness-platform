@@ -10,6 +10,7 @@
   <style>
     .report-meta { color: #819198; font-size: 0.95rem; margin-bottom: 0.25rem; }
     .report-credit { color: #819198; font-size: 0.85rem; font-style: italic; margin-bottom: 1.5rem; }
+    .report-example-note { color: #64748b; font-size: 0.9rem; font-style: italic; margin-bottom: 1rem; }
     .report-section { margin-bottom: 2.5rem; }
     .report-section h3 { margin-top: 1.5rem; }
     .report-section ul { padding-left: 1.25rem; }
@@ -40,7 +41,7 @@
   </header>
 
   <main id="main-content" class="main-content">
-    <p class="report-meta">Generated: 2026-07-27 03:37 UTC &bull; Tool: <a href="https://github.com/samueladegnan/ai-cicd-security-guardrail">ai-cicd-security-guardrail</a> &bull; Generated locally.</p>
+    <p class="report-meta">Generated: 2026-07-27 03:49 UTC &bull; Tool: <a href="https://github.com/samueladegnan/ai-cicd-security-guardrail">ai-cicd-security-guardrail</a> &bull; Generated locally.</p>
     <p class="report-credit">Generated with <a href="https://github.com/samueladegnan/ai-cicd-security-guardrail">ai-cicd-security-guardrail</a>, another project by <a href="https://samueladegnan.github.io/">Samuel Degnan</a>.</p>
 
     <h2>What This Report Shows</h2>
@@ -48,30 +49,50 @@
 
     <div class="report-section">
       <h2>Backend Report</h2>
-      <h2>AI-Driven CI/CD Security Guardrail Report</h2>
-<h3>Summary</h3>
+      <p class="report-example-note"><em>Showing an example finding because the last scan returned no real findings.</em></p>
+      <h3>AI-Driven CI/CD Security Guardrail Report</h3>
+<p><strong>Note:</strong> 👋 Hi, I&#x27;m an example finding for the guardrail tool! This is a demonstration entry shown when the real scan returns no findings.</p>
+<h4>Summary</h4>
 <ul>
-<li><strong>Total findings triaged:</strong> 0</li>
+<li><strong>Total findings triaged:</strong> 1</li>
 <li><strong>High-priority security risks:</strong> 0</li>
 <li><strong>False positives:</strong> 0</li>
-<li><strong>Unclear:</strong> 0</li>
+<li><strong>Unclear:</strong> 1</li>
 </ul>
-<h3>Findings</h3>
-<p>_No findings to report._</p>
+<h4>Findings</h4>
+<p>#### 1. Generic error handler may leak stack traces in production</p>
+<ul>
+<li><strong>Severity:</strong> Low</li>
+<li><strong>Category:</strong> Information disclosure</li>
+<li><strong>Location:</strong> <code>backend/server.js</code></li>
+<li><strong>Risk:</strong> Returning a raw error stack to the client can reveal internal paths and implementation details.</li>
+<li><strong>Recommendation:</strong> Log the full error server-side and return a generic message to the client in production builds.</li>
+<li><strong>Status:</strong> Example finding for demonstration purposes.</li>
+</ul>
     </div>
 
     <div class="report-section">
       <h2>Frontend Report</h2>
-      <h2>AI-Driven CI/CD Security Guardrail Report</h2>
-<h3>Summary</h3>
+      <p class="report-example-note"><em>Showing an example finding because the last scan returned no real findings.</em></p>
+      <h3>AI-Driven CI/CD Security Guardrail Report</h3>
+<p><strong>Note:</strong> 👋 Hi, I&#x27;m an example finding for the guardrail tool! This is a demonstration entry shown when the real scan returns no findings.</p>
+<h4>Summary</h4>
 <ul>
-<li><strong>Total findings triaged:</strong> 0</li>
+<li><strong>Total findings triaged:</strong> 1</li>
 <li><strong>High-priority security risks:</strong> 0</li>
 <li><strong>False positives:</strong> 0</li>
-<li><strong>Unclear:</strong> 0</li>
+<li><strong>Unclear:</strong> 1</li>
 </ul>
-<h3>Findings</h3>
-<p>_No findings to report._</p>
+<h4>Findings</h4>
+<p>#### 1. <code>console.log</code> statement left in production code</p>
+<ul>
+<li><strong>Severity:</strong> Low</li>
+<li><strong>Category:</strong> Debug residue / information disclosure</li>
+<li><strong>Location:</strong> <code>frontend/app.js</code></li>
+<li><strong>Risk:</strong> Debug logging may leak internal state or clutter the browser console in production builds.</li>
+<li><strong>Recommendation:</strong> Remove the statement or replace it with a structured logging utility that respects log levels.</li>
+<li><strong>Status:</strong> Example finding for demonstration purposes.</li>
+</ul>
     </div>
   </main>
 

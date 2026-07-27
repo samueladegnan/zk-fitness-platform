@@ -25,6 +25,14 @@ pgdata/
 # Generated static site
 site/
 
+# Guardrail CI artifacts
+backend-guardrail-report.md
+backend-guardrail-report.json
+frontend-guardrail-report.md
+frontend-guardrail-report.json
+backend.sarif
+frontend.sarif
+
 # Playwright / e2e
 /test-results/
 /playwright-report/

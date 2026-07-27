@@ -14,6 +14,26 @@ def load_markdown(path: Path) -> str:
     return "*No report generated.*"
 
 
+def has_findings(md: str) -> bool:
+    """Return True if the supplied guardrail markdown actually contains findings."""
+    return "### Findings" in md and "No findings to report" not in md
+
+
+def get_report_or_example(name: str, real_md: str, root: Path) -> tuple[str, bool]:
+    """Return the real markdown if it has findings, otherwise fall back to an example.
+
+    The second return value indicates whether the example fallback was used.
+    """
+    if has_findings(real_md):
+        return real_md, False
+
+    example_path = root / "docs" / f"guardrail-example-{name}.md"
+    if example_path.exists():
+        return example_path.read_text(encoding="utf-8"), True
+
+    return real_md, False
+
+
 def _inline_to_html(text: str) -> str:
     """Render inline markdown: code, bold, italic, links."""
     # Escape first so literal HTML is safe.
@@ -92,12 +112,25 @@ def md_to_html(md: str) -> str:
 
 def main() -> None:
     root = Path(__file__).resolve().parent.parent
-    backend_md = load_markdown(root / "backend-guardrail-report.md")
-    frontend_md = load_markdown(root / "frontend-guardrail-report.md")
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    real_backend_md = load_markdown(root / "backend-guardrail-report.md")
+    real_frontend_md = load_markdown(root / "frontend-guardrail-report.md")
+
+    backend_md, backend_is_example = get_report_or_example("backend", real_backend_md, root)
+    frontend_md, frontend_is_example = get_report_or_example("frontend", real_frontend_md, root)
 
     backend_html = md_to_html(backend_md)
     frontend_html = md_to_html(frontend_md)
+
+    example_note = (
+        '<p class="report-example-note">'
+        '<em>Showing an example finding because the last scan returned no real findings.</em>'
+        '</p>'
+    )
+    backend_note = example_note if backend_is_example else ""
+    frontend_note = example_note if frontend_is_example else ""
+
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     run_id = os.environ.get("GITHUB_RUN_ID", "")
@@ -119,6 +152,7 @@ def main() -> None:
   <style>
     .report-meta {{ color: #819198; font-size: 0.95rem; margin-bottom: 0.25rem; }}
     .report-credit {{ color: #819198; font-size: 0.85rem; font-style: italic; margin-bottom: 1.5rem; }}
+    .report-example-note {{ color: #64748b; font-size: 0.9rem; font-style: italic; margin-bottom: 1rem; }}
     .report-section {{ margin-bottom: 2.5rem; }}
     .report-section h3 {{ margin-top: 1.5rem; }}
     .report-section ul {{ padding-left: 1.25rem; }}
@@ -157,11 +191,13 @@ def main() -> None:
 
     <div class="report-section">
       <h2>Backend Report</h2>
+      {backend_note}
       {backend_html}
     </div>
 
     <div class="report-section">
       <h2>Frontend Report</h2>
+      {frontend_note}
       {frontend_html}
     </div>
   </main>
