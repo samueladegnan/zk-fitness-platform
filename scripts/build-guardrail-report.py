@@ -214,7 +214,9 @@ def main() -> None:
 """
 
     output = root / "guardrail.html"
-    output.write_text(page, encoding="utf-8")
+    # Force LF line endings so the output is identical on Windows dev machines
+    # and the Linux CI runner, preventing line-ending churn in Git.
+    output.write_text(page, encoding="utf-8", newline="\n")
     print(f"Built {output}")
 
 

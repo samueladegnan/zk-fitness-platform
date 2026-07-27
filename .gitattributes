@@ -1,0 +1,6 @@
+# Enforce LF line endings for the generated guardrail report and the files that
+# produce it. This stops the guardrail workflow from re-committing guardrail.html
+# just because a Windows dev environment wrote CRLF while the Linux runner wrote LF.
+guardrail.html text eol=lf
+scripts/build-guardrail-report.py text eol=lf
+.github/workflows/ai-guardrail.yml text eol=lf
