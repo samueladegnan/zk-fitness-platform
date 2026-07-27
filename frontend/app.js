@@ -340,7 +340,7 @@ async function localApi(path, options) {
     return { nonce: 'demo-challenge-nonce', difficulty: 4 };
   }
   if (path.startsWith('/auth/')) {
-    return { token: 'local-token', username: 'Local User' };
+    return { token: 'local', username: 'Local User' };
   }
   return {};
 }
@@ -934,7 +934,7 @@ async function startLocalTrial() {
   try {
     isLocalMode = true;
     session.username = 'demo';
-    session.token = 'local-token';
+    session.token = 'local';
     session.encKey = await getLocalEncKey();
     session.salt = new Uint8Array(32);
 

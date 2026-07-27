@@ -120,24 +120,25 @@ function getRecentPRs(workouts, limit = 3, getExerciseName) {
 }
 
 function currentStreak(workouts) {
-  const dates = [...new Set(workouts.map((w) => new Date(w.date).toDateString()))].sort();
-  if (dates.length === 0) return 0;
+  const uniqueTimestamps = [...new Set(workouts.map((w) => {
+    const d = new Date(w.date);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }))].sort((a, b) => a - b);
+  if (uniqueTimestamps.length === 0) return 0;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const last = new Date(dates[dates.length - 1]);
-  last.setHours(0, 0, 0, 0);
-  const daysSinceLast = Math.floor((today - last) / (1000 * 60 * 60 * 24));
+  const last = uniqueTimestamps[uniqueTimestamps.length - 1];
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const daysSinceLast = Math.round((today.getTime() - last) / msPerDay);
 
   if (daysSinceLast > 1) return 0;
 
   let streak = 1;
-  for (let i = dates.length - 1; i > 0; i--) {
-    const d1 = new Date(dates[i]);
-    const d2 = new Date(dates[i - 1]);
-    d1.setHours(0, 0, 0, 0);
-    d2.setHours(0, 0, 0, 0);
-    if ((d1 - d2) / (1000 * 60 * 60 * 24) === 1) streak += 1;
+  for (let i = uniqueTimestamps.length - 1; i > 0; i--) {
+    const diff = (uniqueTimestamps[i] - uniqueTimestamps[i - 1]) / msPerDay;
+    if (Math.round(diff) === 1) streak += 1;
     else break;
   }
   return streak;
