@@ -22,6 +22,7 @@ import {
   escapeHtml,
   getLevenshteinDistance,
   getExerciseHistory,
+  getExerciseChartHistory,
   getExerciseRecords,
   getBestOneRepMax,
   convertWeight,
@@ -30,6 +31,7 @@ import {
   getDistanceUnit,
   formatPlanExerciseTarget,
   computeBadges,
+  formatSetValue,
 } from './lib/fitness.js';
 import { getExerciseById, EXERCISE_CATALOG, isTimeBasedExercise } from './exercises.js';
 import { saveLocalData, loadLocalData, clearLocalData } from './lib/db.js';
@@ -260,7 +262,7 @@ function renderSetFields(exercise, set, exIndex, setIndex, isCardio, isTimeBased
     return `
       <div class="set-field">
         <label>Dist (${getDistanceUnit(session.data.preferences.units)})</label>
-        <input type="number" step="0.1" value="${set.distance}" data-idx="${exIndex}" data-set="${setIndex}" data-field="distance" />
+        <input type="number" step="0.1" value="${formatSetValue(set.distance)}" data-idx="${exIndex}" data-set="${setIndex}" data-field="distance" />
       </div>
       <div class="set-field">
         <label>Time (min)</label>
@@ -272,7 +274,7 @@ function renderSetFields(exercise, set, exIndex, setIndex, isCardio, isTimeBased
     return `
       <div class="set-field">
         <label>Weight (${session.data.preferences.units || 'kg'})</label>
-        <input type="number" placeholder="${session.data.preferences.units || 'kg'}" value="${set.weight}" data-idx="${exIndex}" data-set="${setIndex}" data-field="weight" class="weight-input" data-equipment="${equipment}" />
+        <input type="number" placeholder="${session.data.preferences.units || 'kg'}" value="${formatSetValue(set.weight)}" data-idx="${exIndex}" data-set="${setIndex}" data-field="weight" class="weight-input" data-equipment="${equipment}" />
       </div>
       <div class="set-field">
         <label>Time (sec)</label>
@@ -283,7 +285,7 @@ function renderSetFields(exercise, set, exIndex, setIndex, isCardio, isTimeBased
   return `
     <div class="set-field">
       <label>Weight (${session.data.preferences.units || 'kg'})</label>
-      <input type="number" placeholder="${session.data.preferences.units || 'kg'}" value="${set.weight}" data-idx="${exIndex}" data-set="${setIndex}" data-field="weight" class="weight-input" data-equipment="${equipment}" />
+      <input type="number" placeholder="${session.data.preferences.units || 'kg'}" value="${formatSetValue(set.weight)}" data-idx="${exIndex}" data-set="${setIndex}" data-field="weight" class="weight-input" data-equipment="${equipment}" />
     </div>
     <div class="set-field">
       <label>Reps</label>
@@ -461,9 +463,9 @@ function showToast(message, type = 'info') {
 function convertSetUnits(set, fromUnit, toUnit) {
   return {
     ...set,
-    weight: set.weight ? roundConverted(convertWeight(set.weight, fromUnit, toUnit)) : set.weight,
+    weight: set.weight ? convertWeight(set.weight, fromUnit, toUnit) : set.weight,
     distance: set.distance
-      ? roundConverted(convertDistance(set.distance, getDistanceUnit(fromUnit), getDistanceUnit(toUnit)))
+      ? convertDistance(set.distance, getDistanceUnit(fromUnit), getDistanceUnit(toUnit))
       : set.distance,
   };
 }
@@ -485,7 +487,7 @@ function toggleUnits() {
   session.data.plans.forEach((p) => {
     p.exercises.forEach((ex) => {
       if (ex.targetDistance) {
-        ex.targetDistance = roundConverted(convertDistance(ex.targetDistance, getDistanceUnit(current), getDistanceUnit(next)));
+        ex.targetDistance = convertDistance(ex.targetDistance, getDistanceUnit(current), getDistanceUnit(next));
       }
       ex.sets = ex.sets.map((s) => convertSetUnits(s, current, next));
     });
@@ -500,7 +502,7 @@ function toggleUnits() {
   if (planEditorDraft) {
     planEditorDraft.exercises.forEach((ex) => {
       if (ex.targetDistance) {
-        ex.targetDistance = roundConverted(convertDistance(ex.targetDistance, getDistanceUnit(current), getDistanceUnit(next)));
+        ex.targetDistance = convertDistance(ex.targetDistance, getDistanceUnit(current), getDistanceUnit(next));
       }
       ex.sets = ex.sets.map((s) => convertSetUnits(s, current, next));
     });
@@ -976,12 +978,20 @@ function renderDashboard() {
     };
   }
 
+  // Stats are canonical (kg/km); convert them to the user's display unit for the UI.
+  const displayTonnage = units === 'lbs'
+    ? roundConverted(convertWeight(stats.tonnage, 'kg', 'lbs'))
+    : stats.tonnage;
+  const displayDistance = units === 'lbs'
+    ? roundConverted(convertDistance(stats.distance, 'km', 'mi'))
+    : stats.distance;
+
   $('stat-xp').textContent = stats.totalXp.toLocaleString();
-  $('stat-tonnage').textContent = `${stats.tonnage.toLocaleString()} ${units}`;
+  $('stat-tonnage').textContent = `${Math.round(displayTonnage).toLocaleString()} ${units}`;
   $('stat-workouts').textContent = stats.workouts;
   $('stat-streak').textContent = currentStreak(session.data.workouts);
   $('stat-level').textContent = level;
-  $('stat-distance').textContent = `${stats.distance.toFixed(1)} ${getDistanceUnit(units)}`;
+  $('stat-distance').textContent = `${displayDistance.toFixed(1)} ${getDistanceUnit(units)}`;
   $('stat-calories').textContent = `${stats.calories.toLocaleString()} kcal`;
 
   const progressPercent = Math.min(100, Math.round((xpInfo.current / xpInfo.range) * 100));
@@ -1031,8 +1041,8 @@ function renderDashboard() {
     prContainer.innerHTML = recentPRs
       .map((pr) => {
         const label = pr.time > 0
-          ? `${pr.weight > 0 ? `${pr.weight}${units} ` : ''}${pr.time}sec`
-          : `${pr.weight}${units} × ${pr.reps}`;
+          ? `${pr.weight > 0 ? `${formatSetValue(pr.weight)}${units} ` : ''}${formatSetValue(pr.time, 0)}sec`
+          : `${formatSetValue(pr.weight)}${units} × ${pr.reps}`;
         return `<div class="pr-item"><span>${getExercise(pr.exerciseId).name}</span><strong>${label}</strong></div>`;
       })
       .join('');
@@ -1054,9 +1064,10 @@ function renderDashboard() {
       tr.setAttribute('data-id', w.id);
       tr.setAttribute('data-date', w.date);
       tr.setAttribute('aria-label', `View ${w.name} on ${new Date(w.date).toLocaleDateString()} in history`);
+      const completedExercises = countCompletedExercises(w);
       tr.innerHTML = `<td>${new Date(w.date).toLocaleDateString()}</td>
         <td>${w.name}</td>
-        <td>${w.exercises.length}</td>
+        <td>${completedExercises}</td>
         <td>${w.setsCount || 0}</td>
         <td>${w.xp || 0}</td>`;
       tr.addEventListener('click', () => {
@@ -1174,6 +1185,7 @@ function openExerciseDetail(exerciseId) {
   const ex = getExercise(exerciseId);
   const units = session.data.preferences.units || 'kg';
   const history = getExerciseHistory(session.data.workouts, exerciseId, units);
+  const chartHistory = getExerciseChartHistory(history);
   const records = getExerciseRecords(session.data.workouts, exerciseId, isCardioExercise, units);
   const isCardio = ex.category === 'Cardio';
   const isTimeBased = isTimeBasedExercise(exerciseId);
@@ -1200,7 +1212,7 @@ function openExerciseDetail(exerciseId) {
           ${isCardio ? `
             <div class="exercise-record-card">
               <span class="label">Max Distance</span>
-              <span class="value">${records ? `${records.distance} ${distanceUnits}` : '-'}</span>
+              <span class="value">${records ? `${formatSetValue(records.distance)} ${distanceUnits}` : '-'}</span>
             </div>
             <div class="exercise-record-card">
               <span class="label">Max Duration</span>
@@ -1213,16 +1225,16 @@ function openExerciseDetail(exerciseId) {
           ` : isTimeBased ? `
             <div class="exercise-record-card">
               <span class="label">Max Time</span>
-              <span class="value">${records ? `${records.maxTime} sec` : '-'}</span>
+              <span class="value">${records ? `${formatSetValue(records.maxTime, 0)} sec` : '-'}</span>
             </div>
             <div class="exercise-record-card">
               <span class="label">Max Weight</span>
-              <span class="value">${records ? `${records.maxWeight} ${units}` : '-'}</span>
+              <span class="value">${records ? `${formatSetValue(records.maxWeight)} ${units}` : '-'}</span>
             </div>
           ` : `
             <div class="exercise-record-card">
               <span class="label">Max Weight</span>
-              <span class="value">${records ? `${records.maxWeight} ${units}` : '-'}</span>
+              <span class="value">${records ? `${formatSetValue(records.maxWeight)} ${units}` : '-'}</span>
             </div>
             <div class="exercise-record-card">
               <span class="label">Max Reps</span>
@@ -1258,7 +1270,7 @@ function openExerciseDetail(exerciseId) {
                 <tr class="exercise-history-row" data-workout-id="${h.workoutId}" data-date="${h.date}" role="button" tabindex="0" aria-label="${rowLabel}">
                   <td>${new Date(h.date).toLocaleDateString()}</td>
                   <td>${escapeHtml(h.workoutName)}</td>
-                  <td>${h.distance > 0 ? `${h.distance} ${distanceUnits}` : '-'}</td>
+                  <td>${h.distance > 0 ? `${formatSetValue(h.distance)} ${distanceUnits}` : '-'}</td>
                   <td>${h.durationMinutes > 0 ? `${h.durationMinutes} min` : '-'}</td>
                   <td>${h.speed > 0 ? `${h.speed} ${distanceUnits}/h` : '-'}</td>
                 </tr>
@@ -1266,7 +1278,7 @@ function openExerciseDetail(exerciseId) {
                 <tr class="exercise-history-row" data-workout-id="${h.workoutId}" data-date="${h.date}" role="button" tabindex="0" aria-label="${rowLabel}">
                   <td>${new Date(h.date).toLocaleDateString()}</td>
                   <td>${escapeHtml(h.workoutName)}</td>
-                  <td>${h.weight > 0 ? `${h.weight} ${units}` : '-'}</td>
+                  <td>${h.weight > 0 ? `${formatSetValue(h.weight)} ${units}` : '-'}</td>
                   <td>${h.time > 0 ? `${h.time} sec` : '-'}</td>
                   <td>-</td>
                 </tr>
@@ -1274,7 +1286,7 @@ function openExerciseDetail(exerciseId) {
                 <tr class="exercise-history-row" data-workout-id="${h.workoutId}" data-date="${h.date}" role="button" tabindex="0" aria-label="${rowLabel}">
                   <td>${new Date(h.date).toLocaleDateString()}</td>
                   <td>${escapeHtml(h.workoutName)}</td>
-                  <td>${h.weight > 0 ? `${h.weight} ${units}` : '-'}</td>
+                  <td>${h.weight > 0 ? `${formatSetValue(h.weight)} ${units}` : '-'}</td>
                   <td>${h.reps > 0 ? h.reps : '-'}</td>
                   <td>${h.oneRm > 0 ? Math.round(h.oneRm) : '-'}</td>
                 </tr>
@@ -1289,7 +1301,7 @@ function openExerciseDetail(exerciseId) {
 
   // Render chart after the DOM exists.
   const chartContainer = $('exercise-chart');
-  if (chartContainer) renderExerciseChart(history, chartContainer, isCardio, isTimeBased, units);
+  if (chartContainer) renderExerciseChart(chartHistory, chartContainer, isCardio, isTimeBased, units);
 
 // Wire up exercise history rows to jump to the corresponding workout in history.
   body.querySelectorAll('.exercise-history-row').forEach((row) => {
@@ -1503,7 +1515,7 @@ function openPlanEditor(planId) {
               const summary = formatPlanExerciseTarget(e, isCardio, isTimeBased, units, true);
               const fields = isCardio
                 ? `
-                  <label>Dist (${getDistanceUnit(session.data.preferences.units)}) <input type="number" step="0.1" data-idx="${idx}" data-field="targetDistance" value="${e.targetDistance || ''}" /></label>
+                  <label>Dist (${getDistanceUnit(session.data.preferences.units)}) <input type="number" step="0.1" data-idx="${idx}" data-field="targetDistance" value="${formatSetValue(e.targetDistance || '')}" /></label>
                   <label>Time (min) <input type="number" step="0.1" data-idx="${idx}" data-field="targetDuration" value="${e.targetDuration || ''}" /></label>
                 `
                 : isTimeBased
@@ -1892,7 +1904,7 @@ function renderActiveWorkout(pastWorkoutId) {
               ${isPastEdit ? '' : `<button class="secondary btn-move" data-dir="down" data-idx="${exIndex}" ${exIndex === workout.exercises.length - 1 ? 'disabled' : ''} aria-label="Move exercise down">↓</button>`}
               <div>
                 <h3><button class="btn-exercise-title" data-exercise-id="${exercise.exerciseId}" title="View exercise details">${ex.name}</button></h3>
-                ${!isCardio && (pr.weight > 0 || pr.time > 0) ? `<span class="pr-badge">PR ${pr.time > 0 ? `${pr.weight > 0 ? `${pr.weight}${session.data.preferences.units} ` : ''}${pr.time}sec` : `${pr.weight}${session.data.preferences.units} × ${pr.reps}`}</span>` : ''}
+                ${!isCardio && (pr.weight > 0 || pr.time > 0) ? `<span class="pr-badge">PR ${pr.time > 0 ? `${pr.weight > 0 ? `${formatSetValue(pr.weight)}${session.data.preferences.units} ` : ''}${formatSetValue(pr.time, 0)}sec` : `${formatSetValue(pr.weight)}${session.data.preferences.units} × ${pr.reps}`}</span>` : ''}
               </div>
             </div>
             <div class="exercise-actions">
@@ -2359,7 +2371,12 @@ function savePastWorkoutChanges(workout) {
   showToast('Workout history updated.');
 }
 
+function countCompletedExercises(workout) {
+  return workout.exercises.filter((ex) => ex.sets.some((s) => s.done)).length;
+}
+
 function formatSetSummary(ex, s) {
+  if (!s || !s.done) return '';
   if (isCardioExercise(ex.exerciseId)) {
     const parts = [];
     const distUnit = getDistanceUnit(session.data.preferences.units);
@@ -2367,12 +2384,18 @@ function formatSetSummary(ex, s) {
       const speed = (s.distance / (s.durationMinutes / 60)).toFixed(1);
       parts.push(`${speed} ${distUnit}/h`);
     }
-    if (s.distance > 0) parts.push(`${s.distance}${distUnit}`);
+    if (s.distance > 0) parts.push(`${formatSetValue(s.distance)}${distUnit}`);
     if (s.durationMinutes > 0) parts.push(`${s.durationMinutes}min`);
     if (s.calories > 0) parts.push(`${s.calories}kcal`);
     return parts.join(' ');
   }
-  return s.weight > 0 && s.reps > 0 ? `${s.weight}${session.data.preferences.units}×${s.reps}` : '';
+  if (isTimeBasedExercise(ex.exerciseId)) {
+    const parts = [];
+    if (s.weight > 0) parts.push(`${formatSetValue(s.weight)}${session.data.preferences.units}`);
+    if (s.time > 0) parts.push(`${formatSetValue(s.time, 0)}sec`);
+    return parts.join(' ');
+  }
+  return s.weight > 0 && s.reps > 0 ? `${formatSetValue(s.weight)}${session.data.preferences.units}×${s.reps}` : '';
 }
 
 // ─── Workout Calendar ───────────────────────────────────────────────────────
@@ -2599,6 +2622,7 @@ function renderHistory(targetDate = null) {
     .map(
       (w) => {
         const localDateStr = workoutLocalDate(w.date);
+        const completedExercises = countCompletedExercises(w);
         return `
       <div class="history-card" data-id="${w.id}" data-local-date="${localDateStr}">
         <div class="history-header">
@@ -2607,8 +2631,8 @@ function renderHistory(targetDate = null) {
             <span class="muted">${new Date(w.date).toLocaleString()}</span>
           </div>
           <div class="history-stats">
-            <div class="history-stat" aria-label="${w.exercises.length} exercises">
-              <span class="history-stat-value">${w.exercises.length}</span>
+            <div class="history-stat" aria-label="${completedExercises} exercises">
+              <span class="history-stat-value">${completedExercises}</span>
               <span class="history-stat-label">Exercises</span>
             </div>
             <div class="history-stat-divider" aria-hidden="true"></div>
@@ -2625,6 +2649,7 @@ function renderHistory(targetDate = null) {
         </div>
         <div class="history-exercises">
           ${w.exercises
+            .filter((ex) => ex.sets.some((s) => s.done))
             .map(
               (ex) => {
                 const best1rm = getBestOneRepMax(session.data.workouts, ex.exerciseId);

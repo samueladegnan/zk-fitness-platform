@@ -81,7 +81,10 @@ function finalizeWorkout(workout, isCardioFn, units = 'kg') {
     })),
   };
 
-  finished.setsCount = finished.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+  finished.setsCount = finished.exercises.reduce(
+    (sum, ex) => sum + ex.sets.filter((s) => s.type === 'working' && s.done).length,
+    0
+  );
   finished.xp = xpForWorkout(finished.exercises.flatMap((ex) => ex.sets), units);
   return finished;
 }
@@ -98,7 +101,10 @@ function applyPastWorkoutChanges(workout, units = 'kg') {
       }),
     })),
   };
-  updated.setsCount = updated.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+  updated.setsCount = updated.exercises.reduce(
+    (sum, ex) => sum + ex.sets.filter((s) => s.type === 'working' && s.done).length,
+    0
+  );
   updated.xp = xpForWorkout(updated.exercises.flatMap((ex) => ex.sets), units);
   return updated;
 }

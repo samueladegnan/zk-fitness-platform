@@ -122,8 +122,8 @@ describe('History, records and stats integration', () => {
       name: 'Upper Day',
       date: makeDate(-2),
       exercises: [
-        { exerciseId: 'squat', sets: [{ weight: 100, reps: 5, type: 'working', distance: '', durationMinutes: '', calories: '', heartRate: '' }] },
-        { exerciseId: 'bench_press', sets: [{ weight: 80, reps: 8, type: 'working', distance: '', durationMinutes: '', calories: '', heartRate: '' }] },
+        { exerciseId: 'squat', sets: [{ weight: 100, reps: 5, done: true, type: 'working', distance: '', durationMinutes: '', calories: '', heartRate: '' }] },
+        { exerciseId: 'bench_press', sets: [{ weight: 80, reps: 8, done: true, type: 'working', distance: '', durationMinutes: '', calories: '', heartRate: '' }] },
       ],
     };
     const w2 = {
@@ -131,8 +131,8 @@ describe('History, records and stats integration', () => {
       name: 'Upper Day 2',
       date: makeDate(-1),
       exercises: [
-        { exerciseId: 'squat', sets: [{ weight: 120, reps: 3, type: 'working', distance: '', durationMinutes: '', calories: '', heartRate: '' }] },
-        { exerciseId: 'running', sets: [{ distance: 5, durationMinutes: 30, calories: 300, type: 'working', weight: '', reps: '', heartRate: 150 }] },
+        { exerciseId: 'squat', sets: [{ weight: 120, reps: 3, done: true, type: 'working', distance: '', durationMinutes: '', calories: '', heartRate: '' }] },
+        { exerciseId: 'running', sets: [{ distance: 5, durationMinutes: 30, calories: 300, done: true, type: 'working', weight: '', reps: '', heartRate: 150 }] },
       ],
     };
 
@@ -188,8 +188,8 @@ describe('History, records and stats integration', () => {
 describe('Tonnage and bonus XP integration', () => {
   it('matches tonnage to xpForWorkout for a finished workout', () => {
     const sets = [
-      { weight: 100, reps: 10, type: 'working' },
-      { weight: 80, reps: 8, type: 'working' },
+      { weight: 100, reps: 10, type: 'working', done: true },
+      { weight: 80, reps: 8, type: 'working', done: true },
     ];
     const tonnage = totalTonnage(sets);
     const xp = xpForWorkout(sets);

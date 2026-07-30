@@ -200,7 +200,7 @@ describe('applyPastWorkoutChanges', () => {
     const workout = {
       id: 'w1',
       exercises: [
-        { exerciseId: 'squat', sets: [{ weight: 100, reps: 5, done: true, xp: 0 }] },
+        { exerciseId: 'squat', sets: [{ weight: 100, reps: 5, type: 'working', done: true, xp: 0 }] },
       ],
     };
     const updated = applyPastWorkoutChanges(workout, () => false);

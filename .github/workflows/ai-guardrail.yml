@@ -120,11 +120,6 @@ jobs:
           print('Guardrail passed: no obvious secrets detected.')
           PY
 
-      - name: Build guardrail report page
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          python3 scripts/build-guardrail-report.py
-
       - name: Upload guardrail reports
         if: always() && (hashFiles('backend-guardrail-report.json') != '' || hashFiles('frontend-guardrail-report.json') != '')
         uses: actions/upload-artifact@v4
@@ -135,10 +130,3 @@ jobs:
             backend-guardrail-report.md
             frontend-guardrail-report.json
             frontend-guardrail-report.md
-
-      - name: Commit latest guardrail report page
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "docs: update guardrail report"
-          file_pattern: guardrail.html

@@ -24,6 +24,7 @@ import {
   escapeHtml,
   getLevenshteinDistance,
   getExerciseHistory,
+  getExerciseChartHistory,
   getExerciseRecords,
   getBestOneRepMax,
   convertWeight,
@@ -37,15 +38,15 @@ import {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function strengthSet(weight, reps, type = 'working') {
-  return { type, weight, reps, distance: '', durationMinutes: '', calories: '', heartRate: '' };
+  return { type, weight, reps, done: true, distance: '', durationMinutes: '', calories: '', heartRate: '' };
 }
 
 function cardioSet(distance, durationMinutes, calories = 0, type = 'working') {
-  return { type, weight: '', reps: '', distance, durationMinutes, calories, heartRate: '' };
+  return { type, weight: '', reps: '', done: true, distance, durationMinutes, calories, heartRate: '' };
 }
 
 function timeSet(weight, time, type = 'working') {
-  return { type, weight, reps: '', time, distance: '', durationMinutes: '', calories: '', heartRate: '' };
+  return { type, weight, reps: '', done: true, time, distance: '', durationMinutes: '', calories: '', heartRate: '' };
 }
 
 function makeWorkout({ id = nextId(), name = 'Test Workout', date, exercises = [], xp = 0, setsCount = 0 } = {}) {
@@ -187,6 +188,65 @@ describe('computeStats', () => {
     assert.strictEqual(stats.distance, 0);
     assert.strictEqual(stats.calories, 0);
   });
+
+  it('returns tonnage in canonical kg when display unit is lbs', () => {
+    const workouts = [
+      makeWorkout({
+        exercises: [{ exerciseId: 'squat', sets: [strengthSet(10000, 1)] }],
+        xp: 0,
+      }),
+    ];
+    const stats = computeStats(workouts, () => false, 'lbs');
+    assert.ok(Math.abs(stats.tonnage - 4535.9237) < 0.01);
+  });
+
+  it('returns distance in canonical km when display unit is lbs (miles)', () => {
+    const workouts = [
+      makeWorkout({
+        exercises: [{ exerciseId: 'running', sets: [cardioSet(1, 10, 0)] }],
+        xp: 0,
+      }),
+    ];
+    const stats = computeStats(workouts, () => true, 'lbs');
+    assert.ok(Math.abs(stats.distance - 1.609344) < 0.001);
+  });
+
+  it('produces identical canonical stats regardless of display unit', () => {
+    const kgWorkouts = [
+      makeWorkout({ exercises: [{ exerciseId: 'squat', sets: [strengthSet(100, 5)] }] }),
+    ];
+    const lbWorkouts = [
+      makeWorkout({ exercises: [{ exerciseId: 'squat', sets: [strengthSet(220.462, 5)] }] }),
+    ];
+    const kgStats = computeStats(kgWorkouts, () => false, 'kg');
+    const lbStats = computeStats(lbWorkouts, () => false, 'lbs');
+    assert.ok(Math.abs(kgStats.tonnage - lbStats.tonnage) < 0.1);
+  });
+
+  it('does not unlock the 10,000 kg Heavy Lifter badge from 10,000 lbs', () => {
+    const workouts = [
+      makeWorkout({ exercises: [{ exerciseId: 'squat', sets: [strengthSet(10000, 1)] }] }),
+    ];
+    const stats = computeStats(workouts, () => false, 'lbs');
+    const badges = computeBadges(stats, 0, 1);
+    const heavy = badges.find((b) => b.id === 'heavy_lifter');
+    assert.ok(!heavy.unlocked);
+  });
+
+  it('ignores incomplete sets when computing tonnage, distance and calories', () => {
+    const workouts = [
+      makeWorkout({
+        exercises: [{ exerciseId: 'squat', sets: [strengthSet(100, 5), { ...strengthSet(200, 5), done: false }] }],
+      }),
+      makeWorkout({
+        exercises: [{ exerciseId: 'running', sets: [cardioSet(5, 30, 300), { ...cardioSet(10, 60, 600), done: false }] }],
+      }),
+    ];
+    const stats = computeStats(workouts, () => true, 'kg');
+    assert.strictEqual(stats.tonnage, 100 * 5);
+    assert.strictEqual(stats.distance, 5);
+    assert.ok(stats.calories < 1200);
+  });
 });
 
 describe('getLevel', () => {
@@ -238,6 +298,14 @@ describe('getPR', () => {
   it('returns zero when no records exist', () => {
     const pr = getPR(workouts, 'bench_press');
     assert.strictEqual(pr.weight, 0);
+  });
+
+  it('ignores incomplete sets', () => {
+    const mixed = [
+      makeWorkout({ exercises: [{ exerciseId: 'squat', sets: [strengthSet(100, 5), { ...strengthSet(500, 1), done: false }] }] }),
+    ];
+    const pr = getPR(mixed, 'squat');
+    assert.strictEqual(pr.weight, 100);
   });
 
   it('finds the longest hold time for time-based exercises', () => {
@@ -366,6 +434,44 @@ describe('getExerciseHistory', () => {
     const history = getExerciseHistory(workouts, 'bench_press');
     assert.strictEqual(history.length, 0);
   });
+
+  it('ignores incomplete working sets', () => {
+    const mixed = [
+      makeWorkout({
+        exercises: [{ exerciseId: 'squat', sets: [strengthSet(100, 5), { ...strengthSet(200, 1), done: false }] }],
+      }),
+    ];
+    const history = getExerciseHistory(mixed, 'squat');
+    assert.strictEqual(history.length, 1);
+    assert.strictEqual(history[0].weight, 100);
+  });
+});
+
+describe('getExerciseChartHistory', () => {
+  it('aggregates multiple sets of the same exercise within one workout', () => {
+    const workouts = [
+      makeWorkout({
+        name: 'Run Day',
+        exercises: [{ exerciseId: 'running', sets: [cardioSet(2, 15, 100), cardioSet(3, 20, 150)] }],
+      }),
+    ];
+    const history = getExerciseHistory(workouts, 'running', 'kg');
+    const chart = getExerciseChartHistory(history);
+    assert.strictEqual(chart.length, 1);
+    assert.strictEqual(chart[0].distance, 5);
+    assert.strictEqual(chart[0].durationMinutes, 35);
+  });
+
+  it('keeps separate workouts as separate points', () => {
+    const workouts = [
+      makeWorkout({ name: 'Day 1', exercises: [{ exerciseId: 'running', sets: [cardioSet(5, 30, 300)] }] }),
+      makeWorkout({ name: 'Day 2', exercises: [{ exerciseId: 'running', sets: [cardioSet(6, 35, 350)] }] }),
+    ];
+    const chart = getExerciseChartHistory(getExerciseHistory(workouts, 'running', 'kg'));
+    assert.strictEqual(chart.length, 2);
+    assert.strictEqual(chart[0].distance, 5);
+    assert.strictEqual(chart[1].distance, 6);
+  });
 });
 
 describe('getExerciseRecords', () => {
@@ -427,9 +533,7 @@ describe('convertWeight', () => {
     assert.strictEqual(convertWeight(100, 'kg', 'kg'), 100);
     assert.strictEqual(convertWeight(225, 'lbs', 'lbs'), 225);
   });
-});
-
-describe('convertDistance', () => {
+});describe('convertDistance', () => {
   it('converts km to mi and back', () => {
     assert.strictEqual(roundConverted(convertDistance(5, 'km', 'mi')), 3.11);
     assert.strictEqual(roundConverted(convertDistance(3.11, 'mi', 'km')), 5.01);
@@ -438,6 +542,32 @@ describe('convertDistance', () => {
   it('returns the value unchanged when units match', () => {
     assert.strictEqual(convertDistance(10, 'km', 'km'), 10);
     assert.strictEqual(convertDistance(10, 'mi', 'mi'), 10);
+  });
+
+  it('round-trips exactly without intermediate rounding', () => {
+    const mi = convertDistance(45, 'km', 'mi');
+    const km = convertDistance(mi, 'mi', 'km');
+    assert.ok(Math.abs(km - 45) < 1e-9);
+  });
+});
+
+import { formatSetValue } from '../lib/fitness.js';
+
+describe('formatSetValue', () => {
+  it('rounds numbers to the requested decimals for display', () => {
+    assert.strictEqual(formatSetValue(27.961704, 2), 27.96);
+    assert.strictEqual(formatSetValue(45.1234, 2), 45.12);
+    assert.strictEqual(formatSetValue(45.1234, 0), 45);
+  });
+
+  it('returns an empty string for empty or null values', () => {
+    assert.strictEqual(formatSetValue(''), '');
+    assert.strictEqual(formatSetValue(null), '');
+    assert.strictEqual(formatSetValue(undefined), '');
+  });
+
+  it('returns the raw value for non-numeric input', () => {
+    assert.strictEqual(formatSetValue('abc'), 'abc');
   });
 });
 

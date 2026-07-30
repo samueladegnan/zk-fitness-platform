@@ -101,15 +101,21 @@ def build() -> None:
 
     # Replace the embedded window.GUARDRAIL_REPORTS assignment with the live data.
     reports_json = json.dumps(reports, indent=2)
-    content = re.sub(
+    new_content, replacements = re.subn(
         r"window\.GUARDRAIL_REPORTS\s*=\s*\{[\s\S]*?\};",
         "window.GUARDRAIL_REPORTS = " + reports_json + ";",
         content,
         count=1,
     )
 
+    if replacements == 0:
+        raise RuntimeError("Could not find window.GUARDRAIL_REPORTS marker in guardrail.html")
 
-    guardrail_html.write_text(content, encoding="utf-8", newline="\n")
+    if new_content == content:
+        print(f"{guardrail_html} is already up to date")
+        return
+
+    guardrail_html.write_text(new_content, encoding="utf-8", newline="\n")
     print(f"Built {guardrail_html}")
 
 
