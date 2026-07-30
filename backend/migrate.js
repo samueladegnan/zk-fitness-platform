@@ -4,8 +4,20 @@
  */
 
 const { createPool } = require('./db');
+const { logger } = require('./lib/logger');
 
-const pool = createPool();
+function hasDatabaseConfigured() {
+  return Boolean(process.env.DATABASE_URL) || Boolean(process.env.DB_HOST);
+}
+
+// Defer pool creation so the script can exit cleanly when no database is
+// configured (for example, during the first Render Blueprint sync before the
+// Neon connection string has been added).
+let pool;
+function getPool() {
+  if (!pool) pool = createPool();
+  return pool;
+}
 
 const schema = `
 BEGIN;
@@ -21,7 +33,9 @@ CREATE TABLE IF NOT EXISTS users (
   stripe_subscription_id VARCHAR(255) DEFAULT NULL,
   subscription_period_end TIMESTAMPTZ DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
-);CREATE TABLE IF NOT EXISTS sync_data (
+);
+
+CREATE TABLE IF NOT EXISTS sync_data (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   encrypted_blob TEXT NOT NULL,
   kem_ciphertext TEXT NOT NULL,
@@ -68,17 +82,22 @@ COMMIT;
 `;
 
 async function main() {
-  const client = await pool.connect();
+  if (!hasDatabaseConfigured()) {
+    logger.info('No database configured; skipping migration. Set DATABASE_URL or DB_HOST to enable cloud sync.');
+    return;
+  }
+
+  const client = await getPool().connect();
   try {
     await client.query(schema);
-    console.log('Database migration completed successfully.');
+    logger.info('Database migration completed successfully.');
   } finally {
     client.release();
   }
-  await pool.end();
+  await getPool().end();
 }
 
 main().catch((err) => {
-  console.error('Migration failed:', err);
+  logger.error({ err: err.message, stack: err.stack }, 'Migration failed');
   process.exit(1);
 });

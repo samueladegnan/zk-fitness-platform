@@ -42,8 +42,8 @@ def build(api_base: str = 'http://localhost:3000/api') -> None:
     SITE_DIR.mkdir(parents=True)
 
     # Static assets and the app bundle are copied as-is.
-    shutil.copytree('assets', SITE_DIR / 'assets')
-    shutil.copytree('frontend', SITE_DIR / 'frontend')
+    shutil.copytree('assets', SITE_DIR / 'assets', dirs_exist_ok=True)
+    shutil.copytree('frontend', SITE_DIR / 'frontend', dirs_exist_ok=True)
 
     # Build each portfolio page into its directory index.
     for page in PAGES:

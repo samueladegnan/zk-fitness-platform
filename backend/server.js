@@ -24,9 +24,12 @@ const { randomBytes, createHash } = require('crypto');
 const cookieParser = require('cookie-parser');
 const { createPool } = require('./db');
 const billing = require('./lib/billing');
+const { logger } = require('./lib/logger');
+const pinoHttp = require('pino-http');
 
 const app = express();
 app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
 const IS_DEV = process.env.NODE_ENV !== 'production';
@@ -78,6 +81,7 @@ app.use(cors({
 }));
 
 app.use(cookieParser());
+app.use(pinoHttp({ logger }));
 
 // Stripe webhooks must receive the raw body for signature verification.
 // This route is mounted before express.json() so the body stays raw.
@@ -87,7 +91,7 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
   try {
     event = billing.getStripe().webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET || '');
   } catch (err) {
-    console.error('Stripe webhook signature verification failed:', err.message);
+    logger.warn({ err: err.message }, 'Stripe webhook signature verification failed');
     return res.status(400).json({ error: 'Invalid signature' });
   }
 
@@ -208,6 +212,16 @@ const generalLimiter = rateLimit({
   skip: () => IS_TEST,
   message: { error: 'Too many requests, please slow down.' },
 });
+app.get('/api/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', db: 'connected', timestamp: new Date().toISOString() });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Database health check failed');
+    res.status(503).json({ status: 'error', db: 'disconnected', timestamp: new Date().toISOString() });
+  }
+});
+
 app.use('/api/', generalLimiter);
 
 const authLimiter = rateLimit({
@@ -713,12 +727,11 @@ app.post('/api/billing/refund', authenticate, billingLimiter, async (req, res, n
 });
 
 // ─── Health & Errors ────────────────────────────────────────────────────────
-app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
 app.use((err, _req, res, _next) => {
-  console.error(err);
+  logger.error({ err: err.message, stack: err.stack }, 'Unhandled error');
   res.status(500).json({
     error: IS_DEV ? err.message : 'Internal server error',
   });
@@ -727,8 +740,8 @@ app.use((err, _req, res, _next) => {
 // ─── Start ───────────────────────────────────────────────────────────────────
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`ZK Fitness API listening on port ${PORT}`);
+    logger.info(`ZK Fitness API listening on port ${PORT}`);
   });
 }
 
-module.exports = { app, pool };
+module.exports = { app, pool, logger };

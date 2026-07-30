@@ -15,9 +15,11 @@ services:
     plan: free
     region: oregon
     rootDir: backend
-    buildCommand: npm ci --omit=dev
+    buildCommand: npm ci
     startCommand: npm run start:prod
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 20

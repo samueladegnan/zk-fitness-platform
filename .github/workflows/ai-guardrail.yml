@@ -57,10 +57,11 @@ jobs:
 
       - name: AI Guardrail triage (backend)
         if: steps.eslint-backend.outcome == 'success'
-        # Pinned to the v1.0.0 release of the reusable guardrail action for
-        # stability. The integration-health workflow runs regularly to verify
+        # Pinned to the v1.1.0 release of the reusable guardrail action for
+        # the latest multi-language triage engine, compliance mapping, and
+        # interactive report format. The integration-health workflow verifies
         # compatibility before any future upgrade.
-        uses: samueladegnan/ai-cicd-security-guardrail@v1.0.0
+        uses: samueladegnan/ai-cicd-security-guardrail@v1.1.0
         with:
           report-path: ./backend.sarif
           format: sarif
@@ -73,10 +74,11 @@ jobs:
 
       - name: AI Guardrail triage (frontend)
         if: steps.eslint-frontend.outcome == 'success'
-        # Pinned to the v1.0.0 release of the reusable guardrail action for
-        # stability. The integration-health workflow runs regularly to verify
+        # Pinned to the v1.1.0 release of the reusable guardrail action for
+        # the latest multi-language triage engine, compliance mapping, and
+        # interactive report format. The integration-health workflow verifies
         # compatibility before any future upgrade.
-        uses: samueladegnan/ai-cicd-security-guardrail@v1.0.0
+        uses: samueladegnan/ai-cicd-security-guardrail@v1.1.0
         with:
           report-path: ./frontend.sarif
           format: sarif

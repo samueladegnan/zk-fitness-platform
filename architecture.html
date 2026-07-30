@@ -33,19 +33,19 @@
 
   <main id="main-content" class="main-content">
     <h2>System Architecture</h2>
-    <p>The system is split into two primary tiers:</p>
+    <p>The system has two tiers:</p>
     <ul>
-      <li><strong>Client (Frontend):</strong> HTML5/Vanilla JS app that handles cryptographic operations, UI/UX, and local state management.</li>
-      <li><strong>Server (Backend):</strong> Node.js/Express API backed by PostgreSQL, containerized with Docker for easy deployment.</li>
+      <li><strong>Client:</strong> HTML5/Vanilla JS app that handles cryptography, UI, and local state.</li>
+      <li><strong>Server:</strong> Node.js/Express API backed by PostgreSQL and containerized with Docker.</li>
     </ul>
 
     <h2>Zero-Knowledge Flow</h2>
     <ol>
-      <li>The user enters a password on the client.</li>
-      <li>Argon2id derives both an authentication key and an encryption key from the password.</li>
-      <li>The client encrypts workout data with AES-256-GCM before sending it to the server.</li>
+      <li>You enter a password on the client.</li>
+      <li>Argon2id derives an authentication key and an encryption key.</li>
+      <li>The client encrypts workout data with AES-256-GCM.</li>
       <li>The server stores the encrypted blob in PostgreSQL.</li>
-      <li>On retrieval, the client decrypts the blob locally with the user’s key.</li>
+      <li>On retrieval, the client decrypts the blob locally with your key.</li>
     </ol>
 
     <h2>Technology Stack</h2>
@@ -64,6 +64,11 @@
           <td>UI and local state</td>
         </tr>
         <tr>
+          <td>Type Safety</td>
+          <td>JSDoc + jsconfig.json with <code>checkJs</code></td>
+          <td>Static type checking without a transpiler</td>
+        </tr>
+        <tr>
           <td>Symmetric Encryption</td>
           <td>Web Crypto API, AES-256-GCM, Argon2id</td>
           <td>On-device key derivation and bulk data encryption</td>
@@ -77,6 +82,11 @@
           <td>Backend</td>
           <td>Node.js, Express</td>
           <td>RESTful API endpoints</td>
+        </tr>
+        <tr>
+          <td>Observability</td>
+          <td>Pino structured logging</td>
+          <td>Production-grade JSON logs and DB-aware health checks</td>
         </tr>
         <tr>
           <td>Database</td>

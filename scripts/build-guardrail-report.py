@@ -1,224 +1,119 @@
 #!/usr/bin/env python3
-"""Build a portfolio-ready HTML page from guardrail markdown reports."""
+"""Build the guardrail security report page from JSON triage reports.
 
-from html import escape
-from pathlib import Path
-import re
-
-
-# Example reports are shown when the real guardrail scan returns no findings.
-# They live in docs/ so the page is never empty.
-
-
-def load_markdown(path: Path) -> str:
-    if path.exists():
-        return path.read_text(encoding="utf-8")
-    return "*No report generated.*"
-
-
-def has_findings(md: str) -> bool:
-    """Return True if the supplied guardrail markdown actually contains findings."""
-    return "### Findings" in md and "No findings to report" not in md
-
-
-def get_report_or_example(name: str, real_md: str, root: Path) -> tuple[str, bool]:
-    """Return the real markdown if it has findings, otherwise fall back to an example.
-
-    The second return value indicates whether the example fallback was used.
-    """
-    if has_findings(real_md):
-        return real_md, False
-
-    example_path = root / "docs" / f"guardrail-example-{name}.md"
-    if example_path.exists():
-        return example_path.read_text(encoding="utf-8"), True
-
-    return real_md, False
-
-
-def _inline_to_html(text: str) -> str:
-    """Render inline markdown: code, bold, italic, links."""
-    # Escape first so literal HTML is safe.
-    text = escape(text)
-    # Inline code: `code`
-    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
-    # Bold: **text**
-    text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
-    # Italic: *text* (after bold)
-    text = re.sub(r"\*([^*]+)\*", r"<em>\1</em>", text)
-    # Links: [text](url)
-    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', text)
-    return text
-
-
-def md_to_html(md: str) -> str:
-    """Convert a small subset of markdown to HTML."""
-    lines = md.splitlines()
-    html: list[str] = []
-    in_list = False
-    in_code = False
-
-    for line in lines:
-        stripped = line.lstrip()
-
-        if stripped.startswith("```"):
-            if in_code:
-                html.append("</code></pre>")
-                in_code = False
-            else:
-                html.append("<pre><code>")
-                in_code = True
-            continue
-
-        if in_code:
-            html.append(escape(line))
-            continue
-
-        if stripped.startswith("# "):
-            if in_list:
-                html.append("</ul>")
-                in_list = False
-            html.append(f"<h2>{_inline_to_html(stripped[2:])}</h2>")
-        elif stripped.startswith("## "):
-            if in_list:
-                html.append("</ul>")
-                in_list = False
-            html.append(f"<h3>{_inline_to_html(stripped[3:])}</h3>")
-        elif stripped.startswith("### "):
-            if in_list:
-                html.append("</ul>")
-                in_list = False
-            html.append(f"<h4>{_inline_to_html(stripped[4:])}</h4>")
-        elif stripped.startswith("- "):
-            if not in_list:
-                html.append("<ul>")
-                in_list = True
-            html.append(f"<li>{_inline_to_html(stripped[2:])}</li>")
-        elif stripped == "":
-            if in_list:
-                html.append("</ul>")
-                in_list = False
-        else:
-            if in_list:
-                html.append("</ul>")
-                in_list = False
-            html.append(f"<p>{_inline_to_html(line)}</p>")
-
-    if in_list:
-        html.append("</ul>")
-    if in_code:
-        html.append("</code></pre>")
-
-    return "\n".join(html)
-
-
-def main() -> None:
-    root = Path(__file__).resolve().parent.parent
-
-    real_backend_md = load_markdown(root / "backend-guardrail-report.md")
-    real_frontend_md = load_markdown(root / "frontend-guardrail-report.md")
-
-    backend_md, backend_is_example = get_report_or_example("backend", real_backend_md, root)
-    frontend_md, frontend_is_example = get_report_or_example("frontend", real_frontend_md, root)
-
-    backend_html = md_to_html(backend_md)
-    frontend_html = md_to_html(frontend_md)
-
-    example_note = (
-        '<p class="report-example-note">'
-        '<em>Showing an example finding because the last scan returned no real findings.</em>'
-        '</p>'
-    )
-    backend_note = example_note if backend_is_example else ""
-    frontend_note = example_note if frontend_is_example else ""
-
-    # Static provenance: the file is now deterministic, so it only changes when
-    # the underlying report content changes. This prevents the guardrail workflow
-    # from creating a new commit on every run.
-    provenance = (
-        "Generated automatically by the "
-        '<a href="https://github.com/samueladegnan/ai-cicd-security-guardrail">'
-        "ai-cicd-security-guardrail</a> GitHub Actions workflow."
-    )
-
-    page = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZK Fitness | Security Report</title>
-  <meta name="description" content="Latest AI CICD Security Guardrail triage report for the ZK Fitness project." />
-  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
-  <link rel="stylesheet" href="./assets/css/style.css" />
-  <style>
-    .report-meta {{ color: #819198; font-size: 0.95rem; margin-bottom: 0.25rem; }}
-    .report-credit {{ color: #819198; font-size: 0.85rem; font-style: italic; margin-bottom: 1.5rem; }}
-    .report-example-note {{ color: #64748b; font-size: 0.9rem; font-style: italic; margin-bottom: 1rem; }}
-    .report-section {{ margin-bottom: 2.5rem; }}
-    .report-section h3 {{ margin-top: 1.5rem; }}
-    .report-section ul {{ padding-left: 1.25rem; }}
-    .report-section li {{ margin-bottom: 0.5rem; }}
-  </style>
-</head>
-<body>
-  <a class="skip-link" href="#main-content">Skip to content</a>
-  <nav class="site-nav" aria-label="Primary">
-    <a class="site-nav-brand" href="./">ZK Fitness</a>
-    <ul class="site-nav-links">
-      <li><a href="https://samueladegnan.github.io/" target="_blank" rel="noopener noreferrer">&larr; Back to Portfolio</a></li>
-      <li><a href="./">Overview</a></li>
-      <li><a href="./demo.html">Live Demo</a></li>
-      <li><a href="./architecture.html">Architecture</a></li>
-      <li><a class="active" href="./guardrail.html" aria-current="page">Security Report</a></li>
-      <li>
-        <a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform" aria-label="View source on GitHub">GitHub</a>
-      </li>
-      <li><a class="btn" href="./frontend/">Launch Live Demo</a></li>
-    </ul>
-  </nav>
-
-  <header class="page-header">
-    <h1 class="project-name">ZK Fitness</h1>
-    <p class="project-tagline">Latest AI CICD Security Guardrail triage output for ZK Fitness.</p>
-    <a class="btn" href="./frontend/">Launch Live Demo</a>
-  </header>
-
-  <main id="main-content" class="main-content">
-    <p class="report-meta">{provenance}</p>
-    <p class="report-credit">Generated with <a href=\"https://github.com/samueladegnan/ai-cicd-security-guardrail\">ai-cicd-security-guardrail</a>, another project by <a href=\"https://samueladegnan.github.io/\">Samuel Degnan</a>.</p>
-
-    <h2>What This Report Shows</h2>
-    <p>Every push to main is scanned with ESLint, the findings are exported as a SARIF report, and the AI CICD Security Guardrail triages them. This page is the raw output of the most recent run, committed automatically by the guardrail workflow so the portfolio always reflects the current state of the codebase.</p>
-
-    <div class="report-section">
-      <h2>Backend Report</h2>
-      {backend_note}
-      {backend_html}
-    </div>
-
-    <div class="report-section">
-      <h2>Frontend Report</h2>
-      {frontend_note}
-      {frontend_html}
-    </div>
-  </main>
-
-  <footer class="site-footer">
-    <div class="site-footer__inner">
-      <p class="site-footer__tagline">Privacy-first strength &amp; cardio tracking with client-side encryption.</p>
-      <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
-    </div>
-  </footer>
-</body>
-</html>
+The v1.1.0 guardrail template renders interactive dashboards with the
+GuardrailReportRenderer. This script reads the JSON reports produced by the
+AI CICD Security Guardrail action and injects them into guardrail.html as the
+window.GUARDRAIL_REPORTS data structure.
 """
 
-    output = root / "guardrail.html"
-    # Force LF line endings so the output is identical on Windows dev machines
-    # and the Linux CI runner, preventing line-ending churn in Git.
-    output.write_text(page, encoding="utf-8", newline="\n")
-    print(f"Built {output}")
+import json
+import re
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+EXAMPLE_BACKEND = {
+    "summary": {"total": 1, "high_priority": 0, "false_positive": 0, "unclear": 1},
+    "results": [
+        {
+            "finding": {
+                "rule_id": "generic-error-handler",
+                "message": "Generic error handler may leak stack traces in production.",
+                "file_path": "backend/server.js",
+                "line": 0,
+                "column": 0,
+                "severity": "LOW",
+                "code_snippet": "// Example finding shown when the real scan returns no findings.",
+                "cwe": "CWE-209",
+                "tool": "eslint",
+                "language": "javascript",
+            },
+            "verdict": "UNCLEAR",
+            "confidence": 0.6,
+            "reasoning": "Example finding for demonstration purposes. The real guardrail scan has not yet produced a report.",
+            "compliance_hits": [],
+            "remediation": "Log the full error server-side and return a generic message to the client in production builds.",
+        }
+    ],
+}
+
+EXAMPLE_FRONTEND = {
+    "summary": {"total": 1, "high_priority": 0, "false_positive": 0, "unclear": 1},
+    "results": [
+        {
+            "finding": {
+                "rule_id": "no-console",
+                "message": "console.log statement left in production code.",
+                "file_path": "frontend/app.js",
+                "line": 0,
+                "column": 0,
+                "severity": "LOW",
+                "code_snippet": "// Example finding shown when the real scan returns no findings.",
+                "cwe": None,
+                "tool": "eslint",
+                "language": "javascript",
+            },
+            "verdict": "UNCLEAR",
+            "confidence": 0.6,
+            "reasoning": "Example finding for demonstration purposes. The real guardrail scan has not yet produced a report.",
+            "compliance_hits": [],
+            "remediation": "Remove the statement or replace it with a structured logging utility that respects log levels.",
+        }
+    ],
+}
+
+
+def load_json_report(path: Path) -> dict | None:
+    """Load a guardrail JSON report if it exists and is valid."""
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return None
+        return data
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def build() -> None:
+    root = Path(__file__).resolve().parent.parent
+    backend_report = load_json_report(root / "backend-guardrail-report.json")
+    frontend_report = load_json_report(root / "frontend-guardrail-report.json")
+
+    if backend_report is None:
+        backend_report = {**EXAMPLE_BACKEND, "isExample": True}
+    else:
+        backend_report["isExample"] = False
+
+    if frontend_report is None:
+        frontend_report = {**EXAMPLE_FRONTEND, "isExample": True}
+    else:
+        frontend_report["isExample"] = False
+
+    reports = {
+        "backend": backend_report,
+        "frontend": frontend_report,
+        "timestamp": datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC"),
+    }
+
+    guardrail_html = root / "guardrail.html"
+    content = guardrail_html.read_text(encoding="utf-8")
+
+    # Replace the embedded window.GUARDRAIL_REPORTS assignment with the live data.
+    reports_json = json.dumps(reports, indent=2)
+    content = re.sub(
+        r"window\.GUARDRAIL_REPORTS\s*=\s*\{[\s\S]*?\};",
+        "window.GUARDRAIL_REPORTS = " + reports_json + ";",
+        content,
+        count=1,
+    )
+
+
+    guardrail_html.write_text(content, encoding="utf-8", newline="\n")
+    print(f"Built {guardrail_html}")
 
 
 if __name__ == "__main__":
-    main()
+    build()

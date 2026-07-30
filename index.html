@@ -38,20 +38,19 @@
     </p>
 
     <h2>What It Is</h2>
-    <p><strong>ZK Fitness</strong> is a privacy-first, full-stack strength training and cardio tracking platform. It uses client-side encryption and a zero-knowledge cloud architecture to ensure your workout data remains entirely your own.</p>
+    <p><strong>ZK Fitness</strong> is a privacy-first strength and cardio tracker. It encrypts your data on your device before it reaches the server, so only you can read it.</p>
 
     <h2>How It Works</h2>
-    <p>Using the Web Crypto API, all data is encrypted directly on your device with AES-256-GCM before it touches the network. The backend server only stores opaque blobs it cannot decrypt. Key derivation is handled by Argon2id, providing strong protection against brute-force attacks.</p>
-    <p>Authentication is performed with <strong>ML-DSA-65 (Dilithium)</strong> signatures, and each sync wraps a fresh AES data key using <strong>ML-KEM-768 (Kyber)</strong>. These NIST-standard post-quantum algorithms protect the platform against future cryptographically relevant quantum computers.</p>
+    <p>Data is encrypted on your device with AES-256-GCM before it touches the network. The backend stores only opaque blobs it cannot decrypt. Argon2id derives your encryption key from your password.</p>
+    <p>Login uses <strong>ML-DSA-65</strong> signatures, and each sync wraps a fresh AES key with <strong>ML-KEM-768</strong>. These NIST post-quantum algorithms protect the platform against future quantum computers.</p>
 
     <h2>Key Features</h2>
     <ul>
       <li><strong>Zero-Knowledge Architecture:</strong> End-to-end client-side encryption means the server has zero visibility into your personal health data.</li>
       <li><strong>Post-Quantum Cryptography:</strong> ML-DSA-65 authentication and ML-KEM-768 key encapsulation keep data secure against quantum attacks.</li>
-      <li><strong>Strength &amp; Cardio Tracking:</strong> Log weight and reps for lifting, or distance, duration, heart rate, and calories for running, cycling, swimming, and more.</li>
-      <li><strong>Gamified Progress:</strong> Earn XP, level up, unlock badges, and track active streaks.</li>
-      <li><strong>Smart Rest Timer:</strong> Configurable rest timers with +/- 30s quick controls, audio alerts, and warmup set generation.</li>
-      <li><strong>Plans &amp; History:</strong> Create and edit workout templates, then view, edit, or delete your full workout history.</li>
+      <li><strong>Workout Logging &amp; Planning:</strong> Log strength and cardio sessions, build reusable workout plans, track history, and monitor progress in a clean, user-friendly interface.</li>
+      <li><strong>Cross-Device Sync:</strong> Encrypted cloud sync keeps workouts up to date across authenticated devices without exposing data to the server.</li>
+      <li><strong>Offline-First PWA:</strong> Works fully offline as a Progressive Web App, with local IndexedDB persistence and mobile install support.</li>
       <li><strong>Dark Mode:</strong> Toggle between light and dark themes for comfortable tracking in any environment.</li>
     </ul>
 

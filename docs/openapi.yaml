@@ -1,0 +1,435 @@
+openapi: 3.0.3
+info:
+  title: ZK Fitness API
+  description: |
+    Privacy-first backend for the ZK Fitness platform. The server stores only
+    public keys and opaque encrypted payloads. It never receives the user's
+    password or plaintext workout data.
+  version: 1.0.0
+  contact:
+    name: Samuel Degnan
+    url: https://github.com/samueladegnan/zk-fitness-platform
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local development
+  - url: https://zk-fitness-api.onrender.com/api
+    description: Render production (example)
+
+paths:
+  /health:
+    get:
+      summary: Health and database connectivity check
+      tags: [Health]
+      responses:
+        '200':
+          description: API is healthy and database is reachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthOK'
+        '503':
+          description: API or database is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthError'
+
+  /auth/challenge:
+    get:
+      summary: Get a proof-of-work challenge for registration
+      tags: [Auth]
+      responses:
+        '200':
+          description: A proof-of-work challenge
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Challenge'
+
+  /auth/register:
+    post:
+      summary: Register a new user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/login:
+    post:
+      summary: Authenticate with a post-quantum signature
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/logout:
+    post:
+      summary: Log out the current session
+      tags: [Auth]
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /auth/session:
+    get:
+      summary: Get the current session
+      tags: [Auth]
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Current session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /sync:
+    get:
+      summary: Retrieve the user's encrypted sync payload
+      tags: [Sync]
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Encrypted payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncPayload'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      summary: Store a new encrypted sync payload
+      tags: [Sync]
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncPayload'
+      responses:
+        '200':
+          description: Sync stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncPayload'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /billing/status:
+    get:
+      summary: Get the current user's subscription status
+      tags: [Billing]
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Subscription status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+
+  /billing/checkout:
+    post:
+      summary: Create a Stripe checkout session for cloud sync
+      tags: [Billing]
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+      responses:
+        '200':
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSession'
+
+  /billing/portal:
+    post:
+      summary: Create a Stripe customer portal session
+      tags: [Billing]
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Portal session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+
+  /billing/refund:
+    post:
+      summary: Request a refund
+      tags: [Billing]
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Refund processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /billing/webhook:
+    post:
+      summary: Receive Stripe webhooks
+      tags: [Billing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook received
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: zkfitness_session
+      description: HTTP-only JWT session cookie
+
+  schemas:
+    HealthOK:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        db:
+          type: string
+          example: connected
+        timestamp:
+          type: string
+          format: date-time
+
+    HealthError:
+      type: object
+      properties:
+        status:
+          type: string
+          example: error
+        db:
+          type: string
+          example: disconnected
+        timestamp:
+          type: string
+          format: date-time
+
+    Challenge:
+      type: object
+      properties:
+        nonce:
+          type: string
+        difficulty:
+          type: integer
+
+    RegisterRequest:
+      type: object
+      required: [username, dsaPublicKey, kemPublicKey, nonce, solution]
+      properties:
+        username:
+          type: string
+          minLength: 3
+        dsaPublicKey:
+          type: string
+          description: Base64 ML-DSA-65 public key
+        kemPublicKey:
+          type: string
+          description: Base64 ML-KEM-768 public key
+        nonce:
+          type: string
+        solution:
+          type: integer
+          description: Proof-of-work solution
+
+    LoginRequest:
+      type: object
+      required: [username, signature]
+      properties:
+        username:
+          type: string
+        signature:
+          type: string
+          description: Base64 ML-DSA-65 signature of the server nonce
+
+    Session:
+      type: object
+      properties:
+        username:
+          type: string
+        subscription:
+          $ref: '#/components/schemas/Subscription'
+
+    SyncPayload:
+      type: object
+      required: [iv, ciphertext]
+      properties:
+        iv:
+          type: string
+          description: Base64 AES-GCM IV
+        ciphertext:
+          type: string
+          description: Base64 AES-GCM ciphertext
+        kemCiphertext:
+          type: string
+          description: Base64 ML-KEM-768 ciphertext wrapping the AES key
+
+    Subscription:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [inactive, active]
+        type:
+          type: string
+          enum: [lifetime, subscription]
+        isPaid:
+          type: boolean
+
+    CheckoutRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [lifetime, yearly]
+
+    CheckoutSession:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        url:
+          type: string
+          format: uri
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+    Forbidden:
+      description: Subscription required for this action
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string

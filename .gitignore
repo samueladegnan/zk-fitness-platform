@@ -4,6 +4,7 @@ backend/node_modules/
 
 # Environment
 .env
+.env.*
 backend/.env
 
 # Logs
@@ -37,3 +38,13 @@ frontend.sarif
 /test-results/
 /playwright-report/
 /playwright/.cache/
+
+# Tool caches
+.eslintcache
+.cache/
+coverage/
+.nyc_output/
+
+# Temporary directories
+tmp/
+temp/
