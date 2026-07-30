@@ -175,7 +175,7 @@ describe('computeStats', () => {
     assert.strictEqual(stats.workouts, 2);
     assert.strictEqual(stats.tonnage, 100 * 5 + 120 * 5);
     assert.strictEqual(stats.distance, 5);
-    const expectedStrengthKcal = (100 * 5 + 120 * 5) * 0.015;
+    const expectedStrengthKcal = Math.round((100 * 5 + 120 * 5) * 0.015);
     // Cardio calories are recomputed from distance/duration: 5 km * 60 + 30 min * 10 = 600.
     assert.strictEqual(stats.calories, 600 + expectedStrengthKcal);
   });

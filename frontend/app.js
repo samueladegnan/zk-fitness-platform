@@ -993,7 +993,7 @@ function renderDashboard() {
   $('stat-streak').textContent = currentStreak(session.data.workouts);
   $('stat-level').textContent = level;
   $('stat-distance').textContent = `${displayDistance.toFixed(1)} ${getDistanceUnit(units)}`;
-  $('stat-calories').textContent = `${stats.calories.toLocaleString()} kcal`;
+  $('stat-calories').textContent = `${Math.round(stats.calories).toLocaleString()} kcal`;
 
   const progressPercent = Math.min(100, Math.round((xpInfo.current / xpInfo.range) * 100));
   $('xp-progress').style.width = `${progressPercent}%`;
@@ -2393,7 +2393,7 @@ function formatSetSummary(ex, s) {
     }
     if (s.distance > 0) parts.push(`${formatSetValue(s.distance)}${distUnit}`);
     if (s.durationMinutes > 0) parts.push(`${s.durationMinutes}min`);
-    if (s.calories > 0) parts.push(`${s.calories}kcal`);
+    if (s.calories > 0) parts.push(`${Math.round(s.calories)}kcal`);
     return parts.join(' ');
   }
   if (isTimeBasedExercise(ex.exerciseId)) {

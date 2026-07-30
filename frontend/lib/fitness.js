@@ -157,7 +157,7 @@ function getCaloriesForSet(set, isCardio, units) {
   const reps = Number(set.reps);
   if (!weight || weight <= 0 || !reps || reps <= 0) return 0;
   const weightKg = convertWeight(weight, units, 'kg');
-  return weightKg * reps * 0.015;
+  return Math.round(weightKg * reps * 0.015);
 }
 
 function computeStats(workouts, isCardioFn, units) {
