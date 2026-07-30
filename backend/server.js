@@ -512,28 +512,8 @@ app.get('/api/auth/session', authenticate, async (req, res) => {
   });
 });
 
-async function requireActiveSubscription(req, res, next) {
-  if (IS_TEST) return next();
-  try {
-    const result = await pool.query(
-      'SELECT subscription_status, subscription_type, subscription_period_end FROM users WHERE id = $1',
-      [req.userId]
-    );
-    const status = subscriptionStatusForRow(result.rows[0]);
-    if (!billing.isPaidSubscription(status)) {
-      return res.status(403).json({
-        error: 'Cloud sync requires an active subscription.',
-        code: 'SUBSCRIPTION_REQUIRED',
-      });
-    }
-    next();
-  } catch (err) {
-    next(err);
-  }
-}
-
 // ─── Sync ─────────────────────────────────────────────────────────────────────
-app.get('/api/sync', authenticate, requireActiveSubscription, async (req, res, next) => {
+app.get('/api/sync', authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       'SELECT encrypted_blob, kem_ciphertext, updated_at FROM sync_data WHERE user_id = $1',
@@ -554,7 +534,7 @@ app.get('/api/sync', authenticate, requireActiveSubscription, async (req, res, n
   }
 });
 
-app.put('/api/sync', authenticate, requireActiveSubscription, async (req, res, next) => {
+app.put('/api/sync', authenticate, async (req, res, next) => {
   try {
     const { encryptedBlob, kemCiphertext } = req.body;
     if (!encryptedBlob || typeof encryptedBlob !== 'string' || !kemCiphertext || typeof kemCiphertext !== 'string') {
@@ -590,22 +570,14 @@ function subscriptionStatusForRow(row) {
   return row.subscription_status || 'inactive';
 }
 
-app.get('/api/billing/status', authenticate, async (req, res, next) => {
-  try {
-    const result = await pool.query(
-      'SELECT subscription_status, subscription_type, subscription_period_end, stripe_customer_id FROM users WHERE id = $1',
-      [req.userId]
-    );
-    const status = subscriptionStatusForRow(result.rows[0]);
-    res.json({
-      status,
-      type: result.rows[0]?.subscription_type || null,
-      isPaid: billing.isPaidSubscription(status),
-      billingEnabled: billing.isBillingConfigured(),
-    });
-  } catch (err) {
-    next(err);
-  }
+app.get('/api/billing/status', authenticate, async (req, res) => {
+  // Billing is disabled in demo mode; no subscription prompts should appear.
+  res.json({
+    status: 'inactive',
+    type: null,
+    isPaid: false,
+    billingEnabled: false,
+  });
 });
 
 app.post('/api/billing/checkout', authenticate, billingLimiter, async (req, res, next) => {

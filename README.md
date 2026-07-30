@@ -206,7 +206,7 @@ The app provides a complete, user-friendly workout tracking experience:
 
 ## Monetization
 
-Billing is optional and completely hidden by default. Local mode is free and includes every workout feature. Cloud sync is the only paid feature, because it is the only part that incurs server costs. See [`docs/MONETIZATION.md`](docs/MONETIZATION.md) for pricing, refund policy, and Stripe setup.
+This project is currently a free demo. Cloud sync, local mode, and all workout features are available without payment. Billing and Stripe integration code remain in the repository but are dormant by default.
 
 ## Release Platforms
 

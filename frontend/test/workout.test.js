@@ -72,12 +72,12 @@ describe('toggleSetStatus', () => {
   });
 
   test('preserves cardio values across toggles', () => {
-    const set = { distance: 5, durationMinutes: 30, heartRate: 150, calories: 300, done: false, xp: 0 };
+    const set = { distance: 5, durationMinutes: 30, heartRate: 150, calories: '', done: false, xp: 0 };
     const updated = toggleSetStatus(set);
     assert.equal(updated.distance, 5);
     assert.equal(updated.durationMinutes, 30);
     assert.equal(updated.heartRate, 150);
-    assert.equal(updated.calories, 300);
+    assert.equal(updated.calories, 600);
   });
 });
 
@@ -90,14 +90,14 @@ describe('normalizeSet', () => {
   });
 
   test('converts numeric strings to numbers', () => {
-    const set = { weight: '100', reps: '5', distance: '5', durationMinutes: '30', heartRate: '150', calories: '300', done: true };
+    const set = { weight: '100', reps: '5', distance: '5', durationMinutes: '30', heartRate: '150', calories: '', done: true };
     const normalized = normalizeSet(set);
     assert.equal(normalized.weight, 100);
     assert.equal(normalized.reps, 5);
     assert.equal(normalized.distance, 5);
     assert.equal(normalized.durationMinutes, 30);
     assert.equal(normalized.heartRate, 150);
-    assert.equal(normalized.calories, 300);
+    assert.equal(normalized.calories, 600);
   });
 });
 

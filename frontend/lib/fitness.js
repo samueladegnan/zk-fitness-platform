@@ -5,6 +5,35 @@
  * so they can be unit tested in Node with no special setup.
  */
 
+const KG_PER_LB = 0.45359237;
+const KM_PER_MI = 1.609344;
+
+function convertWeight(value, fromUnit, toUnit) {
+  if (fromUnit === toUnit) return value;
+  const num = Number(value);
+  if (!num || Number.isNaN(num)) return num;
+  if (fromUnit === 'kg' && toUnit === 'lbs') return num / KG_PER_LB;
+  if (fromUnit === 'lbs' && toUnit === 'kg') return num * KG_PER_LB;
+  return num;
+}
+
+function getDistanceUnit(units) {
+  return units === 'lbs' ? 'mi' : 'km';
+}
+
+function convertDistance(value, fromUnit, toUnit) {
+  if (fromUnit === toUnit) return value;
+  const num = Number(value);
+  if (!num || Number.isNaN(num)) return num;
+  if (fromUnit === 'km' && toUnit === 'mi') return num / KM_PER_MI;
+  if (fromUnit === 'mi' && toUnit === 'km') return num * KM_PER_MI;
+  return num;
+}
+
+function roundConverted(value) {
+  return Number((Math.round(value * 100) / 100).toFixed(2));
+}
+
 function calculateOneRepMax(weight, reps) {
   if (!weight || weight <= 0 || !reps || reps < 1) return null;
   const w = Number(weight);
@@ -25,17 +54,19 @@ function averageOneRm(weight, reps) {
   return (est.epley + est.brzycki) / 2;
 }
 
-function xpForSet(set) {
+function xpForSet(set, units = 'kg') {
   if (set.durationMinutes > 0) {
     return Math.max(10, Math.round((set.durationMinutes || 0) * 1.5 + (set.calories || 0) * 0.1));
   }
-  const weight = set.weight || 0;
+  // XP is always based on the actual weight in kg so it doesn't drift when units change.
+  const weightDisplay = set.weight || 0;
+  const weightKg = units === 'lbs' ? weightDisplay * KG_PER_LB : weightDisplay;
   const reps = set.reps || 0;
-  return weight > 0 && reps > 0 ? Math.round(weight * reps * 0.15) : 0;
+  return weightKg > 0 && reps > 0 ? Math.round(weightKg * reps * 0.15) : 0;
 }
 
-function xpForWorkout(sets) {
-  const base = sets.reduce((sum, s) => sum + (s.xp || xpForSet(s)), 0);
+function xpForWorkout(sets, units = 'kg') {
+  const base = sets.reduce((sum, s) => sum + (s.xp || xpForSet(s, units)), 0);
   return sets.length > 0 ? base + 50 : 0;
 }
 
@@ -43,14 +74,26 @@ function totalTonnage(sets) {
   return sets.reduce((sum, s) => sum + (s.weight || 0) * (s.reps || 0), 0);
 }
 
+function calculateCardioCalories(set, units = 'kg') {
+  // Calories are always based on the actual distance in km, regardless of display unit.
+  const distUnit = getDistanceUnit(units);
+  const distanceKm = distUnit === 'mi' ? convertDistance(set.distance, 'mi', 'km') : Number(set.distance);
+  if (distanceKm > 0 && set.durationMinutes > 0) {
+    return Math.round(set.durationMinutes * 10 + distanceKm * 60);
+  }
+  if (distanceKm > 0) return Math.round(distanceKm * 60);
+  if (set.durationMinutes > 0) return Math.round(set.durationMinutes * 10);
+  return 0;
+}
+
 function getCaloriesForSet(set, isCardio, units) {
   if (isCardio) {
-    return Number(set.calories) || 0;
+    return calculateCardioCalories(set, units);
   }
   const weight = Number(set.weight);
   const reps = Number(set.reps);
   if (!weight || weight <= 0 || !reps || reps <= 0) return 0;
-  const weightKg = units === 'lbs' ? weight / 2.20462 : weight;
+  const weightKg = convertWeight(weight, units, 'kg');
   return weightKg * reps * 0.015;
 }
 
@@ -173,8 +216,9 @@ function getLevenshteinDistance(a, b) {
   return matrix[a.length][b.length];
 }
 
-function getExerciseHistory(workouts, exerciseId) {
+function getExerciseHistory(workouts, exerciseId, units = 'kg') {
   const history = [];
+  const distUnit = getDistanceUnit(units);
   for (const w of workouts) {
     const ex = w.exercises.find((e) => e.exerciseId === exerciseId);
     if (!ex) continue;
@@ -182,6 +226,11 @@ function getExerciseHistory(workouts, exerciseId) {
       const s = ex.sets[i];
       if (s.type !== 'working') continue;
       const oneRm = averageOneRm(s.weight, s.reps);
+      const distance = Number(s.distance) || 0;
+      const durationMinutes = Number(s.durationMinutes) || 0;
+      const speed = distance > 0 && durationMinutes > 0
+        ? roundConverted(distance / (durationMinutes / 60))
+        : 0;
       history.push({
         workoutId: w.id,
         workoutName: w.name,
@@ -189,9 +238,10 @@ function getExerciseHistory(workouts, exerciseId) {
         setIndex: i,
         weight: Number(s.weight) || 0,
         reps: Number(s.reps) || 0,
-        distance: Number(s.distance) || 0,
-        durationMinutes: Number(s.durationMinutes) || 0,
+        distance,
+        durationMinutes,
         oneRm,
+        speed,
       });
     }
   }
@@ -216,14 +266,15 @@ function getBestOneRepMax(workouts, exerciseId) {
   return best;
 }
 
-function getExerciseRecords(workouts, exerciseId, isCardioFn) {
-  const history = getExerciseHistory(workouts, exerciseId);
+function getExerciseRecords(workouts, exerciseId, isCardioFn, units = 'kg') {
+  const history = getExerciseHistory(workouts, exerciseId, units);
   const isCardio = isCardioFn ? isCardioFn(exerciseId) : false;
   if (history.length === 0) return null;
   if (isCardio) {
     const distance = history.reduce((max, h) => Math.max(max, h.distance), 0);
     const duration = history.reduce((max, h) => Math.max(max, h.durationMinutes), 0);
-    return { distance, duration };
+    const maxSpeed = history.reduce((max, h) => Math.max(max, h.speed), 0);
+    return { distance, duration, maxSpeed, distUnit: getDistanceUnit(units) };
   }
   const maxWeight = history.reduce((max, h) => Math.max(max, h.weight), 0);
   const maxReps = history.reduce((max, h) => Math.max(max, h.reps), 0);
@@ -241,6 +292,7 @@ export {
   totalTonnage,
   computeStats,
   getCaloriesForSet,
+  calculateCardioCalories,
   getLevel,
   xpToNextLevel,
   getPR,
@@ -251,4 +303,8 @@ export {
   getExerciseHistory,
   getExerciseRecords,
   getBestOneRepMax,
+  convertWeight,
+  convertDistance,
+  roundConverted,
+  getDistanceUnit,
 };

@@ -9,8 +9,6 @@
  */
 
 import {
-  calculateOneRepMax,
-  formatOneRm,
   averageOneRm,
   xpForSet,
   xpForWorkout,
@@ -26,6 +24,10 @@ import {
   getExerciseHistory,
   getExerciseRecords,
   getBestOneRepMax,
+  convertWeight,
+  convertDistance,
+  roundConverted,
+  getDistanceUnit,
 } from './lib/fitness.js';
 import { getExerciseById, EXERCISE_CATALOG } from './exercises.js';
 import { saveLocalData, loadLocalData, clearLocalData } from './lib/db.js';
@@ -77,13 +79,12 @@ let session = {
 let isRegisterMode = true;
 let isAuthenticated = false;
 let isLocalMode = false;
-let billingEnabled = false;
-let subscription = { status: 'inactive', type: null, isPaid: false };
 let globalTimerInterval = null;
 let restTimerInterval = null;
 let restEndTime = 0;
 let currentView = 'auth-view';
 let syncTimeout = null;
+let historyCalendarDate = new Date();
 
 // API failure debounce: suppress toasts until a burst of failures occurs.
 let apiFailureState = { count: 0, timer: null, lastErr: null };
@@ -270,20 +271,12 @@ function renderSetFields(exercise, set, exIndex, setIndex, isCardio) {
   if (isCardio) {
     return `
       <div class="set-field">
-        <label>Dist (${session.data.preferences.units === 'kg' ? 'km' : 'mi'})</label>
+        <label>Dist (${getDistanceUnit(session.data.preferences.units)})</label>
         <input type="number" step="0.1" value="${set.distance}" data-idx="${exIndex}" data-set="${setIndex}" data-field="distance" />
       </div>
       <div class="set-field">
         <label>Time (min)</label>
         <input type="number" step="0.1" value="${set.durationMinutes}" data-idx="${exIndex}" data-set="${setIndex}" data-field="durationMinutes" />
-      </div>
-      <div class="set-field">
-        <label>HR</label>
-        <input type="number" placeholder="bpm" value="${set.heartRate}" data-idx="${exIndex}" data-set="${setIndex}" data-field="heartRate" />
-      </div>
-      <div class="set-field">
-        <label>Kcal</label>
-        <input type="number" placeholder="kcal" value="${set.calories}" data-idx="${exIndex}" data-set="${setIndex}" data-field="calories" />
       </div>
     `;
   }
@@ -299,7 +292,7 @@ function renderSetFields(exercise, set, exIndex, setIndex, isCardio) {
   `;
 }
 
-function createWorkoutExercise(exerciseId, targetSets = 3, targetReps = 8, restSeconds = null) {
+function createWorkoutExercise(exerciseId, targetSets = 3, targetReps = 8, restSeconds = null, lastSetValues = null) {
   const ex = getExercise(exerciseId);
   restSeconds = restSeconds || ex.defaultRestSeconds || session.data.preferences.defaultRestSeconds;
   const last = getLastExerciseSettings(exerciseId);
@@ -309,7 +302,7 @@ function createWorkoutExercise(exerciseId, targetSets = 3, targetReps = 8, restS
     lastSets,
     last ? last.targetReps : targetReps,
     last ? last.restSeconds : restSeconds,
-    last ? getLastSetValues(exerciseId) : null,
+    lastSetValues || (last ? getLastSetValues(exerciseId) : null),
   );
 }
 
@@ -345,7 +338,18 @@ function createPlan(name, exercises) {
     id: crypto.randomUUID(),
     name,
     createdAt: new Date().toISOString(),
-    exercises: exercises.map((e) => createWorkoutExercise(e.exerciseId, e.targetSets, e.targetReps, e.restSeconds)),
+    exercises: exercises.map((e) => {
+      const isCardio = getExercise(e.exerciseId).category === 'Cardio';
+      const lastSetValues = isCardio
+        ? { distance: e.targetDistance || '', durationMinutes: e.targetDuration || '' }
+        : null;
+      const ex = createWorkoutExercise(e.exerciseId, e.targetSets, e.targetReps, e.restSeconds, lastSetValues);
+      if (isCardio) {
+        ex.targetDistance = e.targetDistance || '';
+        ex.targetDuration = e.targetDuration || '';
+      }
+      return ex;
+    }),
   };
 }
 
@@ -447,11 +451,61 @@ function showToast(message, type = 'info') {
   setTimeout(() => toast.classList.remove('visible'), 4000);
 }
 
+function convertSetUnits(set, fromUnit, toUnit) {
+  return {
+    ...set,
+    weight: set.weight ? roundConverted(convertWeight(set.weight, fromUnit, toUnit)) : set.weight,
+    distance: set.distance
+      ? roundConverted(convertDistance(set.distance, getDistanceUnit(fromUnit), getDistanceUnit(toUnit)))
+      : set.distance,
+  };
+}
+
 function toggleUnits() {
   const current = session.data.preferences.units || 'kg';
-  session.data.preferences.units = current === 'kg' ? 'lbs' : 'kg';
+  const next = current === 'kg' ? 'lbs' : 'kg';
+
+  // Convert all stored weight and distance values so the numeric value matches
+  // the new unit (e.g. 5 kg -> 11.02 lbs instead of just relabeling it).
+  session.data.workouts = session.data.workouts.map((w) => ({
+    ...w,
+    exercises: w.exercises.map((ex) => ({
+      ...ex,
+      sets: ex.sets.map((s) => convertSetUnits(s, current, next)),
+    })),
+  }));
+
+  session.data.plans.forEach((p) => {
+    p.exercises.forEach((ex) => {
+      if (ex.targetDistance) {
+        ex.targetDistance = roundConverted(convertDistance(ex.targetDistance, getDistanceUnit(current), getDistanceUnit(next)));
+      }
+      ex.sets = ex.sets.map((s) => convertSetUnits(s, current, next));
+    });
+  });
+
+  if (session.data.activeWorkout) {
+    session.data.activeWorkout.exercises.forEach((ex) => {
+      ex.sets = ex.sets.map((s) => convertSetUnits(s, current, next));
+    });
+  }
+
+  if (planEditorDraft) {
+    planEditorDraft.exercises.forEach((ex) => {
+      if (ex.targetDistance) {
+        ex.targetDistance = roundConverted(convertDistance(ex.targetDistance, getDistanceUnit(current), getDistanceUnit(next)));
+      }
+      ex.sets = ex.sets.map((s) => convertSetUnits(s, current, next));
+    });
+  }
+
+  session.data.preferences.units = next;
+
+  // Recompute XP for every workout now that weights are in the new unit.
+  session.data.workouts = session.data.workouts.map((w) => applyPastWorkoutChanges(w, next));
+
   syncDataImmediate();
-  return session.data.preferences.units;
+  return next;
 }
 
 // ─── Custom Modal (replaces alert/confirm/prompt) ───────────────────────────
@@ -651,7 +705,6 @@ async function performPasswordAuth(username, password, inviteCode) {
 
   isAuthenticated = true;
   renderNav();
-  await loadSubscriptionStatus();
   await loadSync();
   showView('dashboard-view');
   renderDashboard();
@@ -783,22 +836,6 @@ function initAuthUI() {
   }
 }
 
-async function loadSubscriptionStatus() {
-  try {
-    const status = await api('/billing/status');
-    subscription = {
-      status: status.status || 'inactive',
-      type: status.type || null,
-      isPaid: Boolean(status.isPaid),
-    };
-    billingEnabled = Boolean(status.billingEnabled);
-  } catch (err) {
-    console.error('Failed to load subscription status:', err);
-    subscription = { status: 'inactive', type: null, isPaid: false };
-    billingEnabled = false;
-  }
-}
-
 async function startLocalTrial() {
   try {
     isLocalMode = true;
@@ -904,8 +941,6 @@ async function logout() {
   stopGlobalTimer();
   clearInterval(restTimerInterval);
   isAuthenticated = false;    isLocalMode = false;
-  billingEnabled = false;
-  subscription = { status: 'inactive', type: null, isPaid: false };
   renderNav();
   showView('auth-view');
   $('auth-error').textContent = 'You have been logged out.';
@@ -915,41 +950,6 @@ function renderDashboard() {
   const startEmptyBtn = $('start-empty-workout');
   if (startEmptyBtn) {
     startEmptyBtn.onclick = () => startEmptyWorkout();
-  }
-
-  // Render subscription card if billing is enabled.
-  const dashboardMain = $('dashboard-view');
-  let subCard = $('subscription-card');
-  if (!subCard && dashboardMain && billingEnabled) {
-    subCard = document.createElement('div');
-    subCard.id = 'subscription-card';
-    subCard.className = 'panel subscription-card';
-    dashboardMain.insertBefore(subCard, dashboardMain.children[1]);
-  }
-  if (subCard) {
-    const isPaid = subscription.isPaid;
-    const statusText = isPaid
-      ? `Active (${subscription.type === 'lifetime' ? 'Lifetime' : 'Subscription'})`
-      : 'Free (local only)';
-    const isRefundable = isPaid && (subscription.type === 'yearly' || subscription.type === 'lifetime');
-    subCard.innerHTML = `
-      <h2>Subscription</h2>
-      <p class="subscription-status">${statusText}</p>
-      <p class="muted small">${isPaid
-        ? 'Cloud sync across devices is active.'
-        : 'All workout features are free locally. Upgrade to sync across devices.'}</p>
-      <div class="subscription-actions">
-        ${isPaid
-          ? `<button id="manage-subscription" class="secondary">Manage Billing</button>${isRefundable ? ' <button id="request-refund" class="secondary">Request Refund</button>' : ''}`
-          : `<button id="subscribe-btn" class="btn-start">Upgrade</button>`}
-      </div>
-    `;
-    const manageBtn = $('manage-subscription');
-    const subscribeBtn = $('subscribe-btn');
-    const refundBtn = $('request-refund');
-    if (manageBtn) manageBtn.onclick = openBillingPortal;
-    if (subscribeBtn) subscribeBtn.onclick = openPricingModal;
-    if (refundBtn) refundBtn.onclick = requestRefund;
   }
 
   const stats = computeStats(session.data.workouts, isCardioExercise, session.data.preferences.units);
@@ -973,7 +973,7 @@ function renderDashboard() {
   $('stat-workouts').textContent = stats.workouts;
   $('stat-streak').textContent = currentStreak(session.data.workouts);
   $('stat-level').textContent = level;
-  $('stat-distance').textContent = `${stats.distance.toFixed(1)} ${session.data.preferences.units === 'kg' ? 'km' : 'mi'}`;
+  $('stat-distance').textContent = `${stats.distance.toFixed(1)} ${getDistanceUnit(units)}`;
   $('stat-calories').textContent = `${stats.calories.toLocaleString()} kcal`;
 
   const progressPercent = Math.min(100, Math.round((xpInfo.current / xpInfo.range) * 100));
@@ -1006,117 +1006,40 @@ function renderDashboard() {
   } else {
     recent.forEach((w) => {
       const tr = document.createElement('tr');
+      tr.classList.add('dashboard-history-row');
+      tr.setAttribute('role', 'button');
+      tr.setAttribute('tabindex', '0');
+      tr.setAttribute('data-id', w.id);
+      tr.setAttribute('data-date', w.date);
+      tr.setAttribute('aria-label', `View ${w.name} on ${new Date(w.date).toLocaleDateString()} in history`);
       tr.innerHTML = `<td>${new Date(w.date).toLocaleDateString()}</td>
         <td>${w.name}</td>
         <td>${w.exercises.length}</td>
         <td>${w.setsCount || 0}</td>
         <td>${w.xp || 0}</td>`;
+      tr.addEventListener('click', () => {
+        showView('history-view');
+        renderHistory(w.date);
+        requestAnimationFrame(() => {
+          const card = document.querySelector(`.history-card[data-id="${w.id}"]`);
+          if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      });
+      tr.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          tr.click();
+        }
+      });
       tbody.appendChild(tr);
     });
   }
 
 }
 
-// ─── Subscription / Billing ───────────────────────────────────────────────
-
-function openPricingModal() {
-  const modal = $('app-modal');
-  const titleEl = $('app-modal-title');
-  const messageEl = $('app-modal-message');
-  const confirmBtn = $('app-modal-confirm');
-  const cancelBtn = $('app-modal-cancel');
-  const inputWrapper = $('app-modal-input-wrapper');
-
-  if (inputWrapper) inputWrapper.classList.add('hidden');
-  if (titleEl) titleEl.textContent = 'Upgrade ZK Fitness';
-  if (messageEl) {
-    messageEl.innerHTML = `
-      <p>The app is free to use locally. Pay only for encrypted cloud sync across your phone, laptop, and tablet.</p>
-      <div class="pricing-options">
-        <button class="pricing-card" data-type="monthly">
-          <strong>$3.99 / month</strong>
-          <span>Cancel anytime</span>
-        </button>
-        <button class="pricing-card" data-type="yearly">
-          <strong>$29.99 / year</strong>
-          <span>Save 37%</span>
-        </button>
-        <button class="pricing-card" data-type="lifetime">
-          <strong>$79.99 once</strong>
-          <span>Permanent access</span>
-        </button>
-      </div>
-      <p class="muted small">Payments are processed securely by Stripe. Yearly and Lifetime plans include a 14-day money-back guarantee.</p>
-    `;
-  }
-  if (confirmBtn) {
-    confirmBtn.textContent = 'Choose Plan';
-    confirmBtn.disabled = true;
-  }
-  if (cancelBtn) cancelBtn.textContent = 'Maybe Later';
-
-  let selectedType = null;
-  modal.querySelectorAll('.pricing-card').forEach((card) => {
-    card.addEventListener('click', () => {
-      modal.querySelectorAll('.pricing-card').forEach((c) => c.classList.remove('selected'));
-      card.classList.add('selected');
-      selectedType = card.dataset.type;
-      confirmBtn.disabled = false;
-    });
-  });
-
-  confirmBtn.onclick = async () => {
-    if (!selectedType) return;
-    modal.classList.add('hidden');
-    await startCheckout(selectedType);
-  };
-  cancelBtn.onclick = () => modal.classList.add('hidden');
-
-  modal.classList.remove('hidden');
-}
-
-async function startCheckout(priceType) {
-  try {
-    const res = await api('/billing/checkout', {
-      method: 'POST',
-      body: JSON.stringify({ priceType }),
-    });
-    window.location.href = res.url;
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
-async function openBillingPortal() {
-  try {
-    const res = await api('/billing/portal', { method: 'POST' });
-    window.location.href = res.url;
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
-async function requestRefund() {
-  const confirmed = await openAppModal({
-    title: 'Request a refund?',
-    message: 'Yearly and Lifetime plans are eligible for a full refund within 14 days of purchase. This will cancel your subscription and return you to local mode.',
-    confirmText: 'Request Refund',
-    cancelText: 'Keep Subscription',
-  });
-  if (!confirmed) return;
-  try {
-    const res = await api('/billing/refund', { method: 'POST' });
-    showToast(res.message, 'info');
-    await loadSubscriptionStatus();
-    renderDashboard();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
 // ─── Exercise Detail ────────────────────────────────────────────────────────
 
-function renderExerciseChart(history, container, isCardio) {
+function renderExerciseChart(history, container, isCardio, units) {
   if (!history.length) {
     container.innerHTML = '<p class="muted">No data to chart yet.</p>';
     return;
@@ -1198,7 +1121,7 @@ function renderExerciseChart(history, container, isCardio) {
   yAxisLabel.setAttribute('fill', 'var(--muted)');
   yAxisLabel.setAttribute('font-size', '12');
   yAxisLabel.setAttribute('transform', `rotate(-90, 10, ${height / 2})`);
-  yAxisLabel.textContent = isCardio ? 'Distance' : 'Estimated 1RM';
+  yAxisLabel.textContent = isCardio ? `Distance (${getDistanceUnit(units)})` : `Estimated 1RM (${units})`;
   svg.appendChild(yAxisLabel);
 
   container.innerHTML = '';
@@ -1207,15 +1130,16 @@ function renderExerciseChart(history, container, isCardio) {
 
 function openExerciseDetail(exerciseId) {
   const ex = getExercise(exerciseId);
-  const history = getExerciseHistory(session.data.workouts, exerciseId);
-  const records = getExerciseRecords(session.data.workouts, exerciseId, isCardioExercise);
-  const isCardio = ex.category === 'Cardio';
   const units = session.data.preferences.units || 'kg';
+  const history = getExerciseHistory(session.data.workouts, exerciseId, units);
+  const records = getExerciseRecords(session.data.workouts, exerciseId, isCardioExercise, units);
+  const isCardio = ex.category === 'Cardio';
   const modal = $('exercise-detail-modal');
   const body = $('exercise-detail-body');
 
   const best1rm = records && !isCardio ? Math.round(records.best1rm) : null;
 
+  const distanceUnits = getDistanceUnit(units);
   body.innerHTML = `
     <div class="exercise-detail-body">
       <div class="exercise-detail-header">
@@ -1233,11 +1157,15 @@ function openExerciseDetail(exerciseId) {
           ${isCardio ? `
             <div class="exercise-record-card">
               <span class="label">Max Distance</span>
-              <span class="value">${records ? records.distance : '-'} ${units}</span>
+              <span class="value">${records ? `${records.distance} ${distanceUnits}` : '-'}</span>
             </div>
             <div class="exercise-record-card">
               <span class="label">Max Duration</span>
               <span class="value">${records ? `${records.duration} min` : '-'}</span>
+            </div>
+            <div class="exercise-record-card">
+              <span class="label">Max Speed</span>
+              <span class="value">${records ? `${records.maxSpeed} ${distanceUnits}/h` : '-'}</span>
             </div>
           ` : `
             <div class="exercise-record-card">
@@ -1262,48 +1190,36 @@ function openExerciseDetail(exerciseId) {
         <div class="chart-label">${isCardio ? 'Distance per workout' : 'Estimated one-rep max over time'}</div>
       </div>
 
-      <div class="exercise-detail-section">
-        <h3>1RM Calculator</h3>
-        <div class="exercise-detail-1rm">
-          <div class="set-field">
-            <label>Weight (${units})</label>
-            <input id="detail-1rm-weight" type="number" step="0.1" value="" />
-          </div>
-          <div class="set-field">
-            <label>Reps</label>
-            <input id="detail-1rm-reps" type="number" step="1" min="1" value="" />
-          </div>
-          <div class="exercise-detail-1rm-result">
-            <strong id="detail-1rm-result">-</strong>
-            <span>Estimated 1RM</span>
-          </div>
-        </div>
-      </div>
+
 
       <div class="exercise-detail-section">
         <h3>History</h3>
         ${history.length === 0 ? '<p class="muted">No history for this exercise yet.</p>' : `
           <table class="exercise-history-table">
             <thead>
-              ${isCardio ? '<tr><th>Date</th><th>Workout</th><th>Distance</th><th>Duration</th></tr>' : '<tr><th>Date</th><th>Workout</th><th>Weight</th><th>Reps</th><th>Est. 1RM</th></tr>'}
+              ${isCardio ? '<tr><th>Date</th><th>Workout</th><th>Distance</th><th>Duration</th><th>Speed</th></tr>' : '<tr><th>Date</th><th>Workout</th><th>Weight</th><th>Reps</th><th>Est. 1RM</th></tr>'}
             </thead>
             <tbody>
-              ${[...history].reverse().slice(0, 20).map((h) => isCardio ? `
-                <tr>
+              ${[...history].reverse().slice(0, 20).map((h) => {
+                const rowLabel = `View ${escapeHtml(h.workoutName)} on ${new Date(h.date).toLocaleDateString()} in history`;
+                return isCardio ? `
+                <tr class="exercise-history-row" data-workout-id="${h.workoutId}" data-date="${h.date}" role="button" tabindex="0" aria-label="${rowLabel}">
                   <td>${new Date(h.date).toLocaleDateString()}</td>
                   <td>${escapeHtml(h.workoutName)}</td>
-                  <td>${h.distance > 0 ? `${h.distance} ${units}` : '-'}</td>
+                  <td>${h.distance > 0 ? `${h.distance} ${distanceUnits}` : '-'}</td>
                   <td>${h.durationMinutes > 0 ? `${h.durationMinutes} min` : '-'}</td>
+                  <td>${h.speed > 0 ? `${h.speed} ${distanceUnits}/h` : '-'}</td>
                 </tr>
               ` : `
-                <tr>
+                <tr class="exercise-history-row" data-workout-id="${h.workoutId}" data-date="${h.date}" role="button" tabindex="0" aria-label="${rowLabel}">
                   <td>${new Date(h.date).toLocaleDateString()}</td>
                   <td>${escapeHtml(h.workoutName)}</td>
                   <td>${h.weight > 0 ? `${h.weight} ${units}` : '-'}</td>
                   <td>${h.reps > 0 ? h.reps : '-'}</td>
                   <td>${h.oneRm > 0 ? Math.round(h.oneRm) : '-'}</td>
                 </tr>
-              `).join('')}
+              `;
+              }).join('')}
             </tbody>
           </table>
         `}
@@ -1313,26 +1229,28 @@ function openExerciseDetail(exerciseId) {
 
   // Render chart after the DOM exists.
   const chartContainer = $('exercise-chart');
-  if (chartContainer) renderExerciseChart(history, chartContainer, isCardio);
+  if (chartContainer) renderExerciseChart(history, chartContainer, isCardio, units);
 
-  // Wire up the 1RM calculator.
-  const weightInput = $('detail-1rm-weight');
-  const repsInput = $('detail-1rm-reps');
-  const resultEl = $('detail-1rm-result');
-  if (weightInput && repsInput && resultEl) {
-    const update = () => {
-      const result = calculateOneRepMax(weightInput.value, repsInput.value);
-      resultEl.textContent = formatOneRm(result ? (result.epley + result.brzycki) / 2 : null, units);
-    };
-    weightInput.addEventListener('input', update);
-    repsInput.addEventListener('input', update);
-    // Prefill with the best historical set if available.
-    if (records && records.heaviestSet) {
-      weightInput.value = records.heaviestSet.weight;
-      repsInput.value = records.heaviestSet.reps;
-      update();
-    }
-  }
+// Wire up exercise history rows to jump to the corresponding workout in history.
+  body.querySelectorAll('.exercise-history-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const workoutId = row.dataset.workoutId;
+      const date = row.dataset.date;
+      modal.classList.add('hidden');
+      showView('history-view');
+      renderHistory(date);
+      requestAnimationFrame(() => {
+        const card = document.querySelector(`.history-card[data-id="${workoutId}"]`);
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    });
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        row.click();
+      }
+    });
+  });
 
   // Wire up modal buttons and accessibility.
   const closeBtn = $('exercise-detail-close');
@@ -1354,6 +1272,10 @@ function openExerciseDetail(exerciseId) {
 
   modal.classList.remove('hidden');
   if (closeBtn) closeBtn.focus();
+  requestAnimationFrame(() => {
+    const detailScroll = body.querySelector('.exercise-detail-body');
+    if (detailScroll) detailScroll.scrollTop = 0;
+  });
 
   // Focus trap for accessibility.
   const focusable = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -1398,9 +1320,27 @@ function renderPlans() {
   if (startEmptyPlansBtn) {
     startEmptyPlansBtn.onclick = () => startEmptyWorkout();
   }
+
   if (session.data.plans.length === 0) {
-    session.data.plans = seedPlans();
-    syncData();
+    list.innerHTML = `
+      <div class="empty-plans">
+        <p class="muted">No plans yet. Create your own or load the starter plans.</p>
+        <button id="seed-plans-btn" class="secondary">Load Starter Plans</button>
+      </div>
+    `;
+    const seedBtn = $('seed-plans-btn');
+    if (seedBtn) {
+      seedBtn.addEventListener('click', () => {
+        session.data.plans = seedPlans();
+        syncDataImmediate();
+        renderPlans();
+      });
+    }
+    const createBtn = $('create-plan-btn');
+    if (createBtn) {
+      createBtn.onclick = () => openPlanEditor(null);
+    }
+    return;
   }
 
   list.innerHTML = session.data.plans
@@ -1491,20 +1431,34 @@ function openPlanEditor(planId) {
       <div id="plan-exercises-list" class="plan-exercises-edit">
         ${planEditorDraft.exercises
           .map(
-            (e, idx) => `
+            (e, idx) => {
+              const isCardio = isCardioExercise(e.exerciseId);
+              const summary = isCardio
+                ? `${e.targetDistance || 0} ${getDistanceUnit(session.data.preferences.units)} • ${e.targetDuration || 0} min`
+                : `${e.targetSets} sets × ${e.targetReps} reps • ${e.restSeconds}s rest`;
+              const fields = isCardio
+                ? `
+                  <label>Dist (${getDistanceUnit(session.data.preferences.units)}) <input type="number" step="0.1" data-idx="${idx}" data-field="targetDistance" value="${e.targetDistance || ''}" /></label>
+                  <label>Time (min) <input type="number" step="0.1" data-idx="${idx}" data-field="targetDuration" value="${e.targetDuration || ''}" /></label>
+                `
+                : `
+                  <label>Sets <input type="number" data-idx="${idx}" data-field="targetSets" value="${e.targetSets}" /></label>
+                  <label>Reps <input type="number" data-idx="${idx}" data-field="targetReps" value="${e.targetReps}" /></label>
+                  <label>Rest <input type="number" data-idx="${idx}" data-field="restSeconds" value="${e.restSeconds}" /></label>
+                `;
+              return `
           <div class="plan-exercise-row" data-idx="${idx}">
             <div class="plan-exercise-info">
               <strong>${getExercise(e.exerciseId).name}</strong>
-              <span>${e.targetSets} sets × ${e.targetReps} reps • ${e.restSeconds}s rest</span>
+              <span>${summary}</span>
             </div>
             <div class="plan-exercise-fields">
-              <label>Sets <input type="number" data-idx="${idx}" data-field="targetSets" value="${e.targetSets}" /></label>
-              <label>Reps <input type="number" data-idx="${idx}" data-field="targetReps" value="${e.targetReps}" /></label>
-              <label>Rest <input type="number" data-idx="${idx}" data-field="restSeconds" value="${e.restSeconds}" /></label>
+              ${fields}
             </div>
             <button class="secondary btn-remove-plan-ex" data-idx="${idx}">Remove</button>
           </div>
-        `
+        `;
+            }
           )
           .join('')}
       </div>
@@ -1785,7 +1739,13 @@ async function startWorkout(planId, nameOverride) {
     name: nameOverride || (plan ? plan.name : 'Freestyle Workout'),
     date: new Date().toISOString(),
     startTime: Date.now(),
-    exercises: plan ? plan.exercises.map((e) => createWorkoutExercise(e.exerciseId, e.targetSets, e.targetReps, e.restSeconds)) : [],
+    exercises: plan ? plan.exercises.map((e) => {
+      const isCardio = getExercise(e.exerciseId).category === 'Cardio';
+      const lastSetValues = isCardio
+        ? { distance: e.targetDistance || '', durationMinutes: e.targetDuration || '' }
+        : null;
+      return createWorkoutExercise(e.exerciseId, e.targetSets, e.targetReps, e.restSeconds, lastSetValues);
+    }) : [],
     setsCount: 0,
     xp: 0,
   };
@@ -1910,7 +1870,7 @@ function renderActiveWorkout(pastWorkoutId) {
       const exercise = workout.exercises[exIdx];
       // Toggle completion without forcing empty values to 0, so users can
       // mark a set done and still come back to edit weight/reps later.
-      exercise.sets[setIdx] = toggleSetStatus(exercise.sets[setIdx]);
+      exercise.sets[setIdx] = toggleSetStatus(exercise.sets[setIdx], session.data.preferences.units || 'kg');
       persist();
       renderActiveWorkout(pastWorkoutId);
       if (!isPastEdit) {
@@ -2284,7 +2244,7 @@ async function finishWorkout() {
     return;
   }
 
-  const finished = finalizeWorkout(workout, isCardioExercise);
+  const finished = finalizeWorkout(workout, isCardioExercise, session.data.preferences.units || 'kg');
   session.data.workouts.unshift(finished);
   clearActiveWorkout();
   stopGlobalTimer();
@@ -2297,7 +2257,7 @@ async function finishWorkout() {
 }
 
 function savePastWorkoutChanges(workout) {
-  const updated = applyPastWorkoutChanges(workout);
+  const updated = applyPastWorkoutChanges(workout, session.data.preferences.units || 'kg');
   const idx = session.data.workouts.findIndex((w) => w.id === updated.id);
   if (updated.exercises.length === 0) {
     if (idx >= 0) {
@@ -2321,14 +2281,14 @@ function savePastWorkoutChanges(workout) {
 function formatSetSummary(ex, s) {
   if (isCardioExercise(ex.exerciseId)) {
     const parts = [];
+    const distUnit = getDistanceUnit(session.data.preferences.units);
     if (s.distance > 0 && s.durationMinutes > 0) {
-      const pace = (s.durationMinutes / s.distance).toFixed(1);
-      parts.push(`${pace} min/${session.data.preferences.units === 'kg' ? 'km' : 'mi'}`);
+      const speed = (s.distance / (s.durationMinutes / 60)).toFixed(1);
+      parts.push(`${speed} ${distUnit}/h`);
     }
-    if (s.distance > 0) parts.push(`${s.distance}${session.data.preferences.units === 'kg' ? 'km' : 'mi'}`);
+    if (s.distance > 0) parts.push(`${s.distance}${distUnit}`);
     if (s.durationMinutes > 0) parts.push(`${s.durationMinutes}min`);
     if (s.calories > 0) parts.push(`${s.calories}kcal`);
-    if (s.heartRate > 0) parts.push(`${s.heartRate}bpm`);
     return parts.join(' ');
   }
   return s.weight > 0 && s.reps > 0 ? `${s.weight}${session.data.preferences.units}×${s.reps}` : '';
@@ -2349,13 +2309,31 @@ function getWorkoutDates() {
 }
 
 function renderWorkoutCalendar() {
-  let calendarDate = new Date();
   const container = $('history-calendar');
   if (!container) return;
 
+  function closeMonthPopover() {
+    const popover = $('cal-month-popover');
+    const trigger = $('cal-month-trigger');
+    if (popover) popover.classList.add('hidden');
+    if (trigger) {
+      trigger.setAttribute('aria-expanded', 'false');
+      trigger.focus();
+    }
+  }
+
+  function openMonthPopover() {
+    const popover = $('cal-month-popover');
+    const trigger = $('cal-month-trigger');
+    if (popover) popover.classList.remove('hidden');
+    if (trigger) trigger.setAttribute('aria-expanded', 'true');
+    const monthSelect = $('history-month-select');
+    if (monthSelect) monthSelect.focus();
+  }
+
   function render() {
-    const year = calendarDate.getFullYear();
-    const month = calendarDate.getMonth();
+    const year = historyCalendarDate.getFullYear();
+    const month = historyCalendarDate.getMonth();
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
@@ -2364,10 +2342,38 @@ function renderWorkoutCalendar() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const currentYear = new Date().getFullYear();
+    const yearOptions = Array.from({ length: 21 }, (_, i) => currentYear - 10 + i)
+      .map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>${y}</option>`)
+      .join('');
+    const monthOptions = monthNames
+      .map((name, idx) => `<option value="${idx}" ${idx === month ? 'selected' : ''}>${name}</option>`)
+      .join('');
+
     let html = `
       <div class="history-calendar-header">
         <button id="cal-prev" type="button" aria-label="Previous month">←</button>
-        <h3>${calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
+        <div class="history-calendar-month-picker">
+          <button type="button" id="cal-month-trigger" class="history-calendar-month-label" aria-haspopup="true" aria-expanded="false" aria-label="Choose month and year">
+            ${historyCalendarDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+          </button>
+          <div id="cal-month-popover" class="history-calendar-popover hidden" role="dialog" aria-label="Choose month and year">
+            <div class="history-calendar-popover-title">Jump to month</div>
+            <div class="history-calendar-popover-fields">
+              <label>Month
+                <select id="history-month-select">${monthOptions}</select>
+              </label>
+              <label>Year
+                <select id="history-year-select">${yearOptions}</select>
+              </label>
+            </div>
+            <div class="popover-actions">
+              <button type="button" id="cal-month-go">Go</button>
+              <button type="button" id="cal-month-cancel" class="secondary">Cancel</button>
+            </div>
+          </div>
+        </div>
         <button id="cal-next" type="button" aria-label="Next month">→</button>
       </div>
     `;
@@ -2398,42 +2404,91 @@ function renderWorkoutCalendar() {
     }
 
     container.innerHTML = html;
+  }
 
-    $('cal-prev')?.addEventListener('click', () => {
-      calendarDate.setMonth(calendarDate.getMonth() - 1);
-      render();
-    });
-    $('cal-next')?.addEventListener('click', () => {
-      calendarDate.setMonth(calendarDate.getMonth() + 1);
-      render();
-    });
+  // Attach delegated listeners only once to avoid leaks when re-rendering months.
+  if (!container.dataset.calInitialized) {
+    container.dataset.calInitialized = 'true';
 
-    container.querySelectorAll('.history-calendar-day.has-workout').forEach((el) => {
-      el.addEventListener('click', () => {
-        const date = el.dataset.date;
+    container.addEventListener('click', (e) => {
+      const prev = e.target.closest('#cal-prev');
+      if (prev) {
+        historyCalendarDate.setMonth(historyCalendarDate.getMonth() - 1);
+        render();
+        return;
+      }
+      const next = e.target.closest('#cal-next');
+      if (next) {
+        historyCalendarDate.setMonth(historyCalendarDate.getMonth() + 1);
+        render();
+        return;
+      }
+      const trigger = e.target.closest('#cal-month-trigger');
+      if (trigger) {
+        const popover = $('cal-month-popover');
+        if (popover && popover.classList.contains('hidden')) openMonthPopover();
+        else closeMonthPopover();
+        return;
+      }
+      const go = e.target.closest('#cal-month-go');
+      if (go) {
+        const monthSelect = $('history-month-select');
+        const yearSelect = $('history-year-select');
+        if (monthSelect && yearSelect) {
+          historyCalendarDate = new Date(Number(yearSelect.value), Number(monthSelect.value), 1);
+          render();
+        }
+        closeMonthPopover();
+        return;
+      }
+      const cancel = e.target.closest('#cal-month-cancel');
+      if (cancel) {
+        closeMonthPopover();
+        return;
+      }
+      const day = e.target.closest('.history-calendar-day.has-workout');
+      if (day) {
+        const date = day.dataset.date;
         const list = session.data.workouts.filter((w) => w.date.startsWith(date));
         if (list.length === 0) return;
-        // Scroll to the first workout for that date in the history list below.
         const first = document.querySelector(`[data-id="${list[0].id}"]`);
         if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      });
+      }
     });
 
-    container.querySelectorAll('.history-calendar-day.has-workout').forEach((el) => {
-      el.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+    container.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        const day = e.target.closest('.history-calendar-day.has-workout');
+        if (day) {
           e.preventDefault();
-          el.click();
+          day.click();
         }
-      });
+      }
+    });
+
+    // Close the popover when clicking outside of it.
+    document.addEventListener('click', (e) => {
+      const popover = $('cal-month-popover');
+      const trigger = $('cal-month-trigger');
+      if (!popover || popover.classList.contains('hidden')) return;
+      if (!popover.contains(e.target) && !trigger.contains(e.target)) {
+        closeMonthPopover();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeMonthPopover();
     });
   }
 
   render();
 }
 
-function renderHistory() {
+function renderHistory(targetDate = null) {
   const container = $('history-list');
+  if (targetDate) {
+    historyCalendarDate = new Date(targetDate);
+  }
   renderWorkoutCalendar();
   if (session.data.workouts.length === 0) {
     container.innerHTML = '<p class="muted">No completed workouts yet-your first session is waiting for you.</p>';
@@ -2450,9 +2505,20 @@ function renderHistory() {
             <span class="muted">${new Date(w.date).toLocaleString()}</span>
           </div>
           <div class="history-stats">
-            <span>${w.exercises.length} exercises</span>
-            <span>${w.setsCount || 0} sets</span>
-            <span>${w.xp || 0} XP</span>
+            <div class="history-stat" aria-label="${w.exercises.length} exercises">
+              <span class="history-stat-value">${w.exercises.length}</span>
+              <span class="history-stat-label">Exercises</span>
+            </div>
+            <div class="history-stat-divider" aria-hidden="true"></div>
+            <div class="history-stat" aria-label="${w.setsCount || 0} sets">
+              <span class="history-stat-value">${w.setsCount || 0}</span>
+              <span class="history-stat-label">Sets</span>
+            </div>
+            <div class="history-stat-divider" aria-hidden="true"></div>
+            <div class="history-stat" aria-label="${w.xp || 0} XP">
+              <span class="history-stat-value">${w.xp || 0}</span>
+              <span class="history-stat-label">XP</span>
+            </div>
           </div>
         </div>
         <div class="history-exercises">
@@ -2785,6 +2851,10 @@ async function performSync() {
     if (status) status.textContent = isLocalMode ? 'Local data saved.' : 'Encrypted state synced successfully.';
   } catch (err) {
     reportApiError(err, (failure) => {
+      if (failure.code === 'SUBSCRIPTION_REQUIRED') {
+        if (status) status.textContent = 'Saved locally. Cloud sync will resume once the backend is updated.';
+        return;
+      }
       if (status) status.textContent = `Sync failed: ${failure.message}. Saved locally for now.`;
       showToast(`Sync failed: ${failure.message}`, 'error');
     });

@@ -5,7 +5,7 @@
  * They make the active-workout flow unit-testable.
  */
 
-import { xpForSet, xpForWorkout } from './fitness.js';
+import { xpForSet, xpForWorkout, calculateCardioCalories } from './fitness.js';
 
 function createSet(type = 'working', lastSetValues = null) {
   return {
@@ -34,18 +34,12 @@ function createWorkoutExercise(exerciseId, targetSets, targetReps, restSeconds, 
   };
 }
 
-function toggleSetStatus(set) {
-  const updated = { ...set, done: !set.done };
-  updated.xp = updated.done ? xpForSet(updated) : 0;
-  return updated;
-}
-
 function normalizeSetValue(value) {
   return value === '' ? '' : Number(value);
 }
 
-function normalizeSet(set) {
-  return {
+function normalizeSet(set, units = 'kg') {
+  const normalized = {
     ...set,
     weight: normalizeSetValue(set.weight),
     reps: normalizeSetValue(set.reps),
@@ -54,9 +48,22 @@ function normalizeSet(set) {
     heartRate: normalizeSetValue(set.heartRate),
     calories: normalizeSetValue(set.calories),
   };
+  if (normalized.distance > 0 || normalized.durationMinutes > 0) {
+    normalized.calories = calculateCardioCalories(normalized, units);
+  }
+  return normalized;
 }
 
-function finalizeWorkout(workout, isCardioFn) {
+function toggleSetStatus(set, units = 'kg') {
+  const updated = { ...set, done: !set.done };
+  if (updated.done && (updated.distance > 0 || updated.durationMinutes > 0)) {
+    updated.calories = calculateCardioCalories(updated, units);
+  }
+  updated.xp = updated.done ? xpForSet(updated, units) : 0;
+  return updated;
+}
+
+function finalizeWorkout(workout, isCardioFn, units = 'kg') {
   const finished = {
     ...workout,
     endTime: Date.now(),
@@ -64,32 +71,32 @@ function finalizeWorkout(workout, isCardioFn) {
     exercises: workout.exercises.map((ex) => ({
       ...ex,
       sets: ex.sets.map((s) => {
-        const normalized = normalizeSet(s);
-        normalized.xp = normalized.done ? xpForSet(normalized) : 0;
+        const normalized = normalizeSet(s, units);
+        normalized.xp = normalized.done ? xpForSet(normalized, units) : 0;
         return normalized;
       }),
     })),
   };
 
   finished.setsCount = finished.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
-  finished.xp = xpForWorkout(finished.exercises.flatMap((ex) => ex.sets));
+  finished.xp = xpForWorkout(finished.exercises.flatMap((ex) => ex.sets), units);
   return finished;
 }
 
-function applyPastWorkoutChanges(workout) {
+function applyPastWorkoutChanges(workout, units = 'kg') {
   const updated = {
     ...workout,
     exercises: workout.exercises.map((ex) => ({
       ...ex,
       sets: ex.sets.map((s) => {
-        const normalized = normalizeSet(s);
-        normalized.xp = normalized.done ? xpForSet(normalized) : 0;
+        const normalized = normalizeSet(s, units);
+        normalized.xp = normalized.done ? xpForSet(normalized, units) : 0;
         return normalized;
       }),
     })),
   };
   updated.setsCount = updated.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
-  updated.xp = xpForWorkout(updated.exercises.flatMap((ex) => ex.sets));
+  updated.xp = xpForWorkout(updated.exercises.flatMap((ex) => ex.sets), units);
   return updated;
 }
 

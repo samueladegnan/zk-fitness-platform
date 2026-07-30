@@ -26,6 +26,10 @@ import {
   getExerciseHistory,
   getExerciseRecords,
   getBestOneRepMax,
+  convertWeight,
+  convertDistance,
+  roundConverted,
+  getDistanceUnit,
 } from '../lib/fitness.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -94,22 +98,6 @@ describe('formatOneRm', () => {
 
 // ─── XP & Tonnage ───────────────────────────────────────────────────────────
 
-describe('xpForSet', () => {
-  it('awards XP based on weight × reps', () => {
-    assert.strictEqual(xpForSet(strengthSet(100, 10)), Math.round(100 * 10 * 0.15));
-  });
-
-  it('returns 0 when weight or reps are missing', () => {
-    assert.strictEqual(xpForSet(strengthSet(0, 10)), 0);
-    assert.strictEqual(xpForSet(strengthSet(100, 0)), 0);
-  });
-
-  it('awards cardio XP from duration and calories', () => {
-    const set = cardioSet(0, 30, 100);
-    assert.strictEqual(xpForSet(set), Math.max(10, Math.round(30 * 1.5 + 100 * 0.1)));
-  });
-});
-
 describe('xpForWorkout', () => {
   it('adds a 50 XP bonus to the sum of set XP', () => {
     const sets = [strengthSet(100, 10), strengthSet(80, 8)];
@@ -135,9 +123,17 @@ describe('getCaloriesForSet', () => {
     assert.strictEqual(kcal, 100 * 10 * 0.015);
   });
 
-  it('uses user-entered calories for cardio', () => {
+  it('recomputes cardio calories from distance and duration', () => {
+    // 5 km in 30 min -> 5*60 + 30*10 = 600 kcal (formula is based on canonical km).
     const kcal = getCaloriesForSet(cardioSet(5, 30, 300), true, 'kg');
-    assert.strictEqual(kcal, 300);
+    assert.strictEqual(kcal, 600);
+  });
+
+  it('converts cardio distance to km before computing calories', () => {
+    // 3.11 mi is ~5 km; should give the same calories as 5 km.
+    const kcalMi = getCaloriesForSet(cardioSet(3.11, 30, 0), true, 'lbs');
+    const kcalKm = getCaloriesForSet(cardioSet(5, 30, 0), true, 'kg');
+    assert.strictEqual(kcalMi, kcalKm);
   });
 
   it('converts lbs to kg for strength estimates', () => {
@@ -173,7 +169,8 @@ describe('computeStats', () => {
     assert.strictEqual(stats.tonnage, 100 * 5 + 120 * 5);
     assert.strictEqual(stats.distance, 5);
     const expectedStrengthKcal = (100 * 5 + 120 * 5) * 0.015;
-    assert.strictEqual(stats.calories, 300 + expectedStrengthKcal);
+    // Cardio calories are recomputed from distance/duration: 5 km * 60 + 30 min * 10 = 600.
+    assert.strictEqual(stats.calories, 600 + expectedStrengthKcal);
   });
 
   it('returns zeroed stats for no workouts', () => {
@@ -341,6 +338,15 @@ describe('getExerciseHistory', () => {
     assert.ok(history.every((h) => h.oneRm > 0));
   });
 
+  it('includes speed for cardio sets', () => {
+    const cardioWorkouts = [
+      makeWorkout({ exercises: [{ exerciseId: 'running', sets: [cardioSet(5, 30, 300)] }] }),
+    ];
+    const history = getExerciseHistory(cardioWorkouts, 'running', 'kg');
+    assert.strictEqual(history.length, 1);
+    assert.strictEqual(history[0].speed, roundConverted(5 / 0.5));
+  });
+
   it('ignores unrelated exercises', () => {
     const history = getExerciseHistory(workouts, 'bench_press');
     assert.strictEqual(history.length, 0);
@@ -372,6 +378,8 @@ describe('getExerciseRecords', () => {
     const records = getExerciseRecords(cardioWorkouts, 'running', () => true);
     assert.strictEqual(records.distance, 10);
     assert.strictEqual(records.duration, 60);
+    assert.strictEqual(records.maxSpeed, roundConverted(10 / 1));
+    assert.strictEqual(records.distUnit, 'km');
   });
 
   it('includes the heaviest historical set', () => {
@@ -382,6 +390,52 @@ describe('getExerciseRecords', () => {
   it('returns null when no history exists', () => {
     const records = getExerciseRecords(strengthWorkouts, 'bench_press', () => false);
     assert.strictEqual(records, null);
+  });
+});
+
+describe('convertWeight', () => {
+  it('converts kg to lbs and back', () => {
+    assert.strictEqual(roundConverted(convertWeight(5, 'kg', 'lbs')), 11.02);
+    assert.strictEqual(roundConverted(convertWeight(11.02, 'lbs', 'kg')), 5);
+  });
+
+  it('returns the value unchanged when units match', () => {
+    assert.strictEqual(convertWeight(100, 'kg', 'kg'), 100);
+    assert.strictEqual(convertWeight(225, 'lbs', 'lbs'), 225);
+  });
+});
+
+describe('convertDistance', () => {
+  it('converts km to mi and back', () => {
+    assert.strictEqual(roundConverted(convertDistance(5, 'km', 'mi')), 3.11);
+    assert.strictEqual(roundConverted(convertDistance(3.11, 'mi', 'km')), 5.01);
+  });
+
+  it('returns the value unchanged when units match', () => {
+    assert.strictEqual(convertDistance(10, 'km', 'km'), 10);
+    assert.strictEqual(convertDistance(10, 'mi', 'mi'), 10);
+  });
+});
+
+describe('xpForSet', () => {
+  it('awards XP based on weight × reps', () => {
+    assert.strictEqual(xpForSet(strengthSet(100, 10)), Math.round(100 * 10 * 0.15));
+  });
+
+  it('returns 0 when weight or reps are missing', () => {
+    assert.strictEqual(xpForSet(strengthSet(0, 10)), 0);
+    assert.strictEqual(xpForSet(strengthSet(100, 0)), 0);
+  });
+
+  it('awards cardio XP from duration and calories', () => {
+    const set = cardioSet(0, 30, 100);
+    assert.strictEqual(xpForSet(set), Math.max(10, Math.round(30 * 1.5 + 100 * 0.1)));
+  });
+
+  it('normalizes lbs weight to kg before computing XP', () => {
+    const kgSet = strengthSet(100, 10);
+    const lbSet = strengthSet(220.46, 10);
+    assert.strictEqual(xpForSet(kgSet, 'kg'), xpForSet(lbSet, 'lbs'));
   });
 });
 
