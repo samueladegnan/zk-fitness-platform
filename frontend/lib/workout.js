@@ -109,6 +109,13 @@ function applyPastWorkoutChanges(workout, units = 'kg') {
   return updated;
 }
 
+function countCompletedWorkingSets(workout) {
+  return workout.exercises.reduce(
+    (sum, ex) => sum + ex.sets.filter((s) => s.type === 'working' && s.done).length,
+    0
+  );
+}
+
 export {
   createSet,
   createWorkoutExercise,
@@ -116,4 +123,5 @@ export {
   normalizeSet,
   finalizeWorkout,
   applyPastWorkoutChanges,
+  countCompletedWorkingSets,
 };

@@ -53,6 +53,7 @@ import {
   toggleSetStatus,
   finalizeWorkout,
   applyPastWorkoutChanges,
+  countCompletedWorkingSets,
 } from './lib/workout.js';
 
 // API_BASE can be overridden for production by setting window.ZK_API_BASE
@@ -2337,6 +2338,11 @@ async function finishWorkout() {
     return;
   }
 
+  if (countCompletedWorkingSets(workout) === 0) {
+    showToast('Complete at least one working set before finishing the workout.', 'error');
+    return;
+  }
+
   const finished = finalizeWorkout(workout, isCardioExercise, session.data.preferences.units || 'kg');
   session.data.workouts.unshift(finished);
   clearActiveWorkout();
@@ -2352,11 +2358,12 @@ async function finishWorkout() {
 function savePastWorkoutChanges(workout) {
   const updated = applyPastWorkoutChanges(workout, session.data.preferences.units || 'kg');
   const idx = session.data.workouts.findIndex((w) => w.id === updated.id);
-  if (updated.exercises.length === 0) {
+  if (updated.exercises.length === 0 || countCompletedWorkingSets(updated) === 0) {
     if (idx >= 0) {
       session.data.workouts.splice(idx, 1);
       syncDataImmediate();
     }
+    showToast('Workout removed because it has no completed sets.', 'info');
     showView('history-view');
     renderHistory();
     return;

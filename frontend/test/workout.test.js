@@ -7,6 +7,7 @@ import {
   normalizeSet,
   finalizeWorkout,
   applyPastWorkoutChanges,
+  countCompletedWorkingSets,
 } from '../lib/workout.js';
 
 describe('createSet', () => {
@@ -180,6 +181,37 @@ describe('finalizeWorkout', () => {
     const finished = finalizeWorkout(workout, () => false);
     assert.ok(finished.endTime >= start);
     assert.equal(finished.durationSeconds, 120);
+  });
+});
+
+describe('countCompletedWorkingSets', () => {
+  test('returns 0 for an empty workout', () => {
+    const workout = { exercises: [] };
+    assert.equal(countCompletedWorkingSets(workout), 0);
+  });
+
+  test('returns 0 when no working sets are done', () => {
+    const workout = {
+      exercises: [
+        { exerciseId: 'squat', sets: [{ type: 'working', done: false }] },
+        { exerciseId: 'bench', sets: [{ type: 'working', done: false }] },
+      ],
+    };
+    assert.equal(countCompletedWorkingSets(workout), 0);
+  });
+
+  test('counts only completed working sets', () => {
+    const workout = {
+      exercises: [
+        { exerciseId: 'squat', sets: [
+          { type: 'working', done: true },
+          { type: 'working', done: false },
+          { type: 'warmup', done: true },
+        ] },
+        { exerciseId: 'bench', sets: [{ type: 'working', done: true }] },
+      ],
+    };
+    assert.equal(countCompletedWorkingSets(workout), 2);
   });
 });
 
