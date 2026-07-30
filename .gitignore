@@ -44,6 +44,8 @@ frontend.sarif
 .cache/
 coverage/
 .nyc_output/
+__pycache__/
+*.py[cod]
 
 # Temporary directories
 tmp/

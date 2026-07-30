@@ -28,8 +28,10 @@ import {
   convertDistance,
   roundConverted,
   getDistanceUnit,
+  formatPlanExerciseTarget,
+  computeBadges,
 } from './lib/fitness.js';
-import { getExerciseById, EXERCISE_CATALOG } from './exercises.js';
+import { getExerciseById, EXERCISE_CATALOG, isTimeBasedExercise } from './exercises.js';
 import { saveLocalData, loadLocalData, clearLocalData } from './lib/db.js';
 import {
   arrayBufferToBase64,
@@ -85,6 +87,7 @@ let restEndTime = 0;
 let currentView = 'auth-view';
 let syncTimeout = null;
 let historyCalendarDate = new Date();
+let selectedCalendarDate = null;
 
 // API failure debounce: suppress toasts until a burst of failures occurs.
 let apiFailureState = { count: 0, timer: null, lastErr: null };
@@ -216,16 +219,6 @@ function isCardioExercise(exerciseId) {
   return getExercise(exerciseId).category === 'Cardio';
 }
 
-function computeBadges(stats) {
-  const badges = [];
-  if (stats.workouts >= 1) badges.push({ id: 'first_workout', name: 'First Workout', icon: '️' });
-  if (stats.workouts >= 10) badges.push({ id: 'dedication', name: 'Dedication', icon: '🔥' });
-  if (stats.workouts >= 50) badges.push({ id: 'veteran', name: 'Veteran', icon: '💪' });
-  if (stats.tonnage >= 10000) badges.push({ id: 'heavy_lifter', name: 'Heavy Lifter', icon: '🏆' });
-  if (stats.totalXp >= 1000) badges.push({ id: 'xp_grinder', name: 'XP Grinder', icon: '⭐' });
-  return badges;
-}
-
 // ─── Auto-populate helpers ───────────────────────────────────────────────────
 
 function getLastSetValues(exerciseId) {
@@ -261,7 +254,7 @@ function createSet(type = 'working', exerciseId = null) {
   return createSetModel(type, last);
 }
 
-function renderSetFields(exercise, set, exIndex, setIndex, isCardio) {
+function renderSetFields(exercise, set, exIndex, setIndex, isCardio, isTimeBased) {
   const equipment = escapeHtml(getExercise(exercise.exerciseId).equipment || '');
   if (isCardio) {
     return `
@@ -272,6 +265,18 @@ function renderSetFields(exercise, set, exIndex, setIndex, isCardio) {
       <div class="set-field">
         <label>Time (min)</label>
         <input type="number" step="0.1" value="${set.durationMinutes}" data-idx="${exIndex}" data-set="${setIndex}" data-field="durationMinutes" />
+      </div>
+    `;
+  }
+  if (isTimeBased) {
+    return `
+      <div class="set-field">
+        <label>Weight (${session.data.preferences.units || 'kg'})</label>
+        <input type="number" placeholder="${session.data.preferences.units || 'kg'}" value="${set.weight}" data-idx="${exIndex}" data-set="${setIndex}" data-field="weight" class="weight-input" data-equipment="${equipment}" />
+      </div>
+      <div class="set-field">
+        <label>Time (sec)</label>
+        <input type="number" placeholder="sec" value="${set.time}" data-idx="${exIndex}" data-set="${setIndex}" data-field="time" />
       </div>
     `;
   }
@@ -287,17 +292,19 @@ function renderSetFields(exercise, set, exIndex, setIndex, isCardio) {
   `;
 }
 
-function createWorkoutExercise(exerciseId, targetSets = 3, targetReps = 8, restSeconds = null, lastSetValues = null) {
+function createWorkoutExercise(exerciseId, targetSets = 3, targetReps = 8, restSeconds = null, lastSetValues = null, targetTime = null) {
   const ex = getExercise(exerciseId);
   restSeconds = restSeconds || ex.defaultRestSeconds || session.data.preferences.defaultRestSeconds;
   const last = getLastExerciseSettings(exerciseId);
   const lastSets = last && last.sets.length > 0 ? last.sets.length : targetSets;
+  const isTimeBased = isTimeBasedExercise(exerciseId);
   return createWorkoutExerciseModel(
     exerciseId,
     lastSets,
     last ? last.targetReps : targetReps,
     last ? last.restSeconds : restSeconds,
     lastSetValues || (last ? getLastSetValues(exerciseId) : null),
+    isTimeBased ? (last ? last.targetTime : targetTime) : null,
   );
 }
 
@@ -335,13 +342,18 @@ function createPlan(name, exercises) {
     createdAt: new Date().toISOString(),
     exercises: exercises.map((e) => {
       const isCardio = getExercise(e.exerciseId).category === 'Cardio';
+      const isTimeBased = isTimeBasedExercise(e.exerciseId);
       const lastSetValues = isCardio
         ? { distance: e.targetDistance || '', durationMinutes: e.targetDuration || '' }
-        : null;
-      const ex = createWorkoutExercise(e.exerciseId, e.targetSets, e.targetReps, e.restSeconds, lastSetValues);
+        : isTimeBased
+          ? { time: e.targetTime || '', weight: '' }
+          : null;
+      const ex = createWorkoutExercise(e.exerciseId, e.targetSets, isTimeBased ? null : e.targetReps, e.restSeconds, lastSetValues, isTimeBased ? e.targetTime : null);
       if (isCardio) {
         ex.targetDistance = e.targetDistance || '';
         ex.targetDuration = e.targetDuration || '';
+      } else if (isTimeBased) {
+        ex.targetTime = e.targetTime || '';
       }
       return ex;
     }),
@@ -903,7 +915,7 @@ function renderNav() {
   $('nav-dashboard').addEventListener('click', () => { showView('dashboard-view'); renderDashboard(); });
   $('nav-plans').addEventListener('click', () => { showView('plans-view'); renderPlans(); });
   $('nav-history').addEventListener('click', () => { showView('history-view'); renderHistory(); });
-  $('nav-exercises').addEventListener('click', () => { exerciseSelectCallback = null; showView('exercises-view'); renderExercises(); });
+  $('nav-exercises').addEventListener('click', () => { exerciseSelectCallback = null; showView('exercises-view'); renderExercises('Add to Workout', true); });
   $('nav-logout').addEventListener('click', logout);
 }
 
@@ -950,7 +962,8 @@ function renderDashboard() {
   const stats = computeStats(session.data.workouts, isCardioExercise, session.data.preferences.units);
   const level = getLevel(stats.totalXp);
   const xpInfo = xpToNextLevel(stats.totalXp);
-  const badges = computeBadges(stats);
+  const streak = currentStreak(session.data.workouts);
+  const badges = computeBadges(stats, streak, level);
   const recentPRs = getRecentPRs(session.data.workouts, 3, getExercise);
   const units = session.data.preferences.units || 'kg';
 
@@ -976,18 +989,52 @@ function renderDashboard() {
   $('xp-progress-text').textContent = `${xpInfo.current}/${xpInfo.range} XP to next level`;
 
   const badgeContainer = $('badges-list');
-  if (badges.length === 0) {
-    badgeContainer.innerHTML = '<p class="muted">Finish a workout and your first badge will land here.</p>';
+  const unlockedBadges = badges.filter((b) => b.unlocked);
+  const lockedBadges = badges.filter((b) => !b.unlocked);
+
+  // Pick the locked badge closest to completion as the "next up" teaser.
+  const nextBadge = lockedBadges.length > 0
+    ? [...lockedBadges].sort((a, b) => (b.progress / b.target) - (a.progress / a.target))[0]
+    : null;
+
+  let badgeHtml = '';
+
+  if (unlockedBadges.length === 0) {
+    badgeHtml += '<div class="badge-empty"><span class="badge-empty-icon" aria-hidden="true">🏅</span><p class="muted">Finish a workout and your first badge will land here.</p></div>';
   } else {
-    badgeContainer.innerHTML = badges.map((b) => `<span class="badge" title="${b.name}">${b.icon} ${b.name}</span>`).join('');
+    badgeHtml += unlockedBadges.map((b) => {
+      return `<article class="badge-card earned" data-tier="${b.tier}">
+        <span class="badge-card-icon" aria-hidden="true">${b.icon}</span>
+        <h4 class="badge-card-title">${escapeHtml(b.name)}</h4>
+        <p class="badge-card-desc">${escapeHtml(b.description)}</p>
+      </article>`;
+    }).join('');
   }
+
+  if (nextBadge) {
+    badgeHtml += `<article class="badge-card next-up">
+      <span class="badge-card-icon" aria-hidden="true">⏳</span>
+      <h4 class="badge-card-title">Next: ${escapeHtml(nextBadge.name)}</h4>
+      <div class="badge-progress-track" role="progressbar" aria-valuenow="${nextBadge.progressPercent}" aria-valuemin="0" aria-valuemax="100">
+        <div class="badge-progress-fill" style="width: ${nextBadge.progressPercent}%;"></div>
+      </div>
+      <p class="badge-card-desc">${nextBadge.progress.toLocaleString()} / ${nextBadge.target.toLocaleString()}${nextBadge.target === 1 ? '' : ` (${nextBadge.progressPercent}%)`}</p>
+    </article>`;
+  }
+
+  badgeContainer.innerHTML = badgeHtml;
 
   const prContainer = $('pr-list');
   if (recentPRs.length === 0) {
     prContainer.innerHTML = '<p class="muted">Log a workout and your latest personal records will show up here.</p>';
   } else {
     prContainer.innerHTML = recentPRs
-      .map((pr) => `<div class="pr-item"><span>${getExercise(pr.exerciseId).name}</span><strong>${pr.weight}${units} × ${pr.reps}</strong></div>`)
+      .map((pr) => {
+        const label = pr.time > 0
+          ? `${pr.weight > 0 ? `${pr.weight}${units} ` : ''}${pr.time}sec`
+          : `${pr.weight}${units} × ${pr.reps}`;
+        return `<div class="pr-item"><span>${getExercise(pr.exerciseId).name}</span><strong>${label}</strong></div>`;
+      })
       .join('');
   }
 
@@ -1034,7 +1081,7 @@ function renderDashboard() {
 
 // ─── Exercise Detail ────────────────────────────────────────────────────────
 
-function renderExerciseChart(history, container, isCardio, units) {
+function renderExerciseChart(history, container, isCardio, isTimeBased, units) {
   if (!history.length) {
     container.innerHTML = '<p class="muted">No data to chart yet.</p>';
     return;
@@ -1046,9 +1093,8 @@ function renderExerciseChart(history, container, isCardio, units) {
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
-  const values = isCardio
-    ? history.map((h) => h.distance)
-    : history.map((h) => h.oneRm);
+  const valueKey = isCardio ? 'distance' : isTimeBased ? 'time' : 'oneRm';
+  const values = history.map((h) => h[valueKey]);
   const maxValue = Math.max(...values, 1);
   const minValue = Math.min(...values, 0);
   const range = Math.max(maxValue - minValue, 1);
@@ -1056,14 +1102,15 @@ function renderExerciseChart(history, container, isCardio, units) {
   const xFor = (i) => padding.left + (i / Math.max(history.length - 1, 1)) * chartWidth;
   const yFor = (v) => padding.top + chartHeight - ((v - minValue) / range) * chartHeight;
 
-  const points = history.map((h, i) => ({ x: xFor(i), y: yFor(isCardio ? h.distance : h.oneRm), value: isCardio ? h.distance : h.oneRm }));
+  const points = history.map((h, i) => ({ x: xFor(i), y: yFor(h[valueKey]), value: h[valueKey] }));
   const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
 
+  const yLabel = isCardio ? 'Distance' : isTimeBased ? 'Hold time (sec)' : 'Estimated 1RM';
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', `${isCardio ? 'Distance' : 'Estimated 1RM'} over time`);
+  svg.setAttribute('aria-label', `${yLabel} over time`);
 
   // Grid lines
   for (let i = 0; i <= 4; i += 1) {
@@ -1116,7 +1163,7 @@ function renderExerciseChart(history, container, isCardio, units) {
   yAxisLabel.setAttribute('fill', 'var(--muted)');
   yAxisLabel.setAttribute('font-size', '12');
   yAxisLabel.setAttribute('transform', `rotate(-90, 10, ${height / 2})`);
-  yAxisLabel.textContent = isCardio ? `Distance (${getDistanceUnit(units)})` : `Estimated 1RM (${units})`;
+  yAxisLabel.textContent = isCardio ? `Distance (${getDistanceUnit(units)})` : isTimeBased ? 'Hold time (sec)' : `Estimated 1RM (${units})`;
   svg.appendChild(yAxisLabel);
 
   container.innerHTML = '';
@@ -1129,10 +1176,11 @@ function openExerciseDetail(exerciseId) {
   const history = getExerciseHistory(session.data.workouts, exerciseId, units);
   const records = getExerciseRecords(session.data.workouts, exerciseId, isCardioExercise, units);
   const isCardio = ex.category === 'Cardio';
+  const isTimeBased = isTimeBasedExercise(exerciseId);
   const modal = $('exercise-detail-modal');
   const body = $('exercise-detail-body');
 
-  const best1rm = records && !isCardio ? Math.round(records.best1rm) : null;
+  const best1rm = records && !isCardio && !isTimeBased ? Math.round(records.best1rm) : null;
 
   const distanceUnits = getDistanceUnit(units);
   body.innerHTML = `
@@ -1162,6 +1210,15 @@ function openExerciseDetail(exerciseId) {
               <span class="label">Max Speed</span>
               <span class="value">${records ? `${records.maxSpeed} ${distanceUnits}/h` : '-'}</span>
             </div>
+          ` : isTimeBased ? `
+            <div class="exercise-record-card">
+              <span class="label">Max Time</span>
+              <span class="value">${records ? `${records.maxTime} sec` : '-'}</span>
+            </div>
+            <div class="exercise-record-card">
+              <span class="label">Max Weight</span>
+              <span class="value">${records ? `${records.maxWeight} ${units}` : '-'}</span>
+            </div>
           ` : `
             <div class="exercise-record-card">
               <span class="label">Max Weight</span>
@@ -1182,7 +1239,7 @@ function openExerciseDetail(exerciseId) {
       <div class="exercise-detail-section">
         <h3>Progress Chart</h3>
         <div class="exercise-detail-chart" id="exercise-chart"></div>
-        <div class="chart-label">${isCardio ? 'Distance per workout' : 'Estimated one-rep max over time'}</div>
+        <div class="chart-label">${isCardio ? 'Distance per workout' : isTimeBased ? 'Hold time over time' : 'Estimated one-rep max over time'}</div>
       </div>
 
 
@@ -1192,7 +1249,7 @@ function openExerciseDetail(exerciseId) {
         ${history.length === 0 ? '<p class="muted">No history for this exercise yet.</p>' : `
           <table class="exercise-history-table">
             <thead>
-              ${isCardio ? '<tr><th>Date</th><th>Workout</th><th>Distance</th><th>Duration</th><th>Speed</th></tr>' : '<tr><th>Date</th><th>Workout</th><th>Weight</th><th>Reps</th><th>Est. 1RM</th></tr>'}
+              ${isCardio ? '<tr><th>Date</th><th>Workout</th><th>Distance</th><th>Duration</th><th>Speed</th></tr>' : isTimeBased ? '<tr><th>Date</th><th>Workout</th><th>Weight</th><th>Time</th><th></th></tr>' : '<tr><th>Date</th><th>Workout</th><th>Weight</th><th>Reps</th><th>Est. 1RM</th></tr>'}
             </thead>
             <tbody>
               ${[...history].reverse().slice(0, 20).map((h) => {
@@ -1204,6 +1261,14 @@ function openExerciseDetail(exerciseId) {
                   <td>${h.distance > 0 ? `${h.distance} ${distanceUnits}` : '-'}</td>
                   <td>${h.durationMinutes > 0 ? `${h.durationMinutes} min` : '-'}</td>
                   <td>${h.speed > 0 ? `${h.speed} ${distanceUnits}/h` : '-'}</td>
+                </tr>
+              ` : isTimeBased ? `
+                <tr class="exercise-history-row" data-workout-id="${h.workoutId}" data-date="${h.date}" role="button" tabindex="0" aria-label="${rowLabel}">
+                  <td>${new Date(h.date).toLocaleDateString()}</td>
+                  <td>${escapeHtml(h.workoutName)}</td>
+                  <td>${h.weight > 0 ? `${h.weight} ${units}` : '-'}</td>
+                  <td>${h.time > 0 ? `${h.time} sec` : '-'}</td>
+                  <td>-</td>
                 </tr>
               ` : `
                 <tr class="exercise-history-row" data-workout-id="${h.workoutId}" data-date="${h.date}" role="button" tabindex="0" aria-label="${rowLabel}">
@@ -1224,7 +1289,7 @@ function openExerciseDetail(exerciseId) {
 
   // Render chart after the DOM exists.
   const chartContainer = $('exercise-chart');
-  if (chartContainer) renderExerciseChart(history, chartContainer, isCardio, units);
+  if (chartContainer) renderExerciseChart(history, chartContainer, isCardio, isTimeBased, units);
 
 // Wire up exercise history rows to jump to the corresponding workout in history.
   body.querySelectorAll('.exercise-history-row').forEach((row) => {
@@ -1347,7 +1412,12 @@ function renderPlans() {
           <span class="plan-meta">${plan.exercises.length} exercises</span>
         </div>
         <ul class="plan-exercises">
-          ${plan.exercises.map((e) => `<li class="plan-exercise-item" data-exercise-id="${e.exerciseId}" role="button" tabindex="0" aria-label="View details for ${escapeHtml(getExercise(e.exerciseId).name)}">${escapeHtml(getExercise(e.exerciseId).name)} - ${e.targetSets}x${e.targetReps}</li>`).join('')}
+          ${plan.exercises.map((e) => {
+            const exInfo = getExercise(e.exerciseId);
+            const units = session.data.preferences.units || 'kg';
+            const targetDisplay = formatPlanExerciseTarget(e, exInfo.category === 'Cardio', isTimeBasedExercise(e.exerciseId), units, false);
+            return `<li class="plan-exercise-item" data-exercise-id="${e.exerciseId}" role="button" tabindex="0" aria-label="View details for ${escapeHtml(exInfo.name)}">${escapeHtml(exInfo.name)} - ${targetDisplay}</li>`;
+          }).join('')}
         </ul>
         <div class="plan-actions">
           <button class="btn-start" data-id="${plan.id}">Start Workout</button>
@@ -1428,15 +1498,21 @@ function openPlanEditor(planId) {
           .map(
             (e, idx) => {
               const isCardio = isCardioExercise(e.exerciseId);
-              const summary = isCardio
-                ? `${e.targetDistance || 0} ${getDistanceUnit(session.data.preferences.units)} • ${e.targetDuration || 0} min`
-                : `${e.targetSets} sets × ${e.targetReps} reps • ${e.restSeconds}s rest`;
+              const isTimeBased = isTimeBasedExercise(e.exerciseId);
+              const units = session.data.preferences.units || 'kg';
+              const summary = formatPlanExerciseTarget(e, isCardio, isTimeBased, units, true);
               const fields = isCardio
                 ? `
                   <label>Dist (${getDistanceUnit(session.data.preferences.units)}) <input type="number" step="0.1" data-idx="${idx}" data-field="targetDistance" value="${e.targetDistance || ''}" /></label>
                   <label>Time (min) <input type="number" step="0.1" data-idx="${idx}" data-field="targetDuration" value="${e.targetDuration || ''}" /></label>
                 `
-                : `
+                : isTimeBased
+                  ? `
+                  <label>Sets <input type="number" data-idx="${idx}" data-field="targetSets" value="${e.targetSets}" /></label>
+                  <label>Time (sec) <input type="number" data-idx="${idx}" data-field="targetTime" value="${e.targetTime || ''}" /></label>
+                  <label>Rest <input type="number" data-idx="${idx}" data-field="restSeconds" value="${e.restSeconds}" /></label>
+                `
+                  : `
                   <label>Sets <input type="number" data-idx="${idx}" data-field="targetSets" value="${e.targetSets}" /></label>
                   <label>Reps <input type="number" data-idx="${idx}" data-field="targetReps" value="${e.targetReps}" /></label>
                   <label>Rest <input type="number" data-idx="${idx}" data-field="restSeconds" value="${e.restSeconds}" /></label>
@@ -1500,7 +1576,7 @@ function openPlanEditor(planId) {
         }
         exerciseSelectCallback = null;
       };
-      renderExercises('Add to Plan');
+      renderExercises('Add to Plan', true);
     });
 
     container.querySelectorAll('.plan-exercise-fields input').forEach((input) => {
@@ -1527,7 +1603,7 @@ function openPlanEditor(planId) {
 let exerciseSelectCallback = null;
 let exerciseSelectButtonText = 'Add to Workout';
 
-function renderExercises(buttonText = null) {
+function renderExercises(buttonText = null, autoFocus = false) {
   const container = $('exercises-list');
   exerciseSelectButtonText = buttonText || exerciseSelectButtonText || 'Add to Workout';
   const cats = ['All', ...new Set(EXERCISE_CATALOG.map((e) => e.category))];
@@ -1692,6 +1768,12 @@ function renderExercises(buttonText = null) {
   }
 
   const searchInput = $('exercise-search');
+  if (searchInput && autoFocus) {
+    requestAnimationFrame(() => {
+      searchInput.focus();
+    });
+  }
+
   let searchDebounce;
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
@@ -1800,6 +1882,7 @@ function renderActiveWorkout(pastWorkoutId) {
       const ex = getExercise(exercise.exerciseId);
       const pr = getPR(session.data.workouts, exercise.exerciseId);
       const isCardio = isCardioExercise(exercise.exerciseId);
+      const isTimeBased = isTimeBasedExercise(exercise.exerciseId);
       return `
         <div class="active-exercise" data-idx="${exIndex}">
           <div class="active-exercise-header">
@@ -1809,7 +1892,7 @@ function renderActiveWorkout(pastWorkoutId) {
               ${isPastEdit ? '' : `<button class="secondary btn-move" data-dir="down" data-idx="${exIndex}" ${exIndex === workout.exercises.length - 1 ? 'disabled' : ''} aria-label="Move exercise down">↓</button>`}
               <div>
                 <h3><button class="btn-exercise-title" data-exercise-id="${exercise.exerciseId}" title="View exercise details">${ex.name}</button></h3>
-                ${!isCardio && pr.weight > 0 ? `<span class="pr-badge">PR ${pr.weight}${session.data.preferences.units} × ${pr.reps}</span>` : ''}
+                ${!isCardio && (pr.weight > 0 || pr.time > 0) ? `<span class="pr-badge">PR ${pr.time > 0 ? `${pr.weight > 0 ? `${pr.weight}${session.data.preferences.units} ` : ''}${pr.time}sec` : `${pr.weight}${session.data.preferences.units} × ${pr.reps}`}</span>` : ''}
               </div>
             </div>
             <div class="exercise-actions">
@@ -1819,21 +1902,24 @@ function renderActiveWorkout(pastWorkoutId) {
                 <input type="number" value="${exercise.restSeconds}" data-idx="${exIndex}" data-field="restSeconds" />
                 <span>s</span>
               </div>
-              ${!isCardio ? `<button class="secondary btn-add-warmup" data-idx="${exIndex}">+ Warmup</button>` : ''}
+              ${!isCardio && !isTimeBased ? `<button class="secondary btn-add-warmup" data-idx="${exIndex}">+ Warmup</button>` : ''}
               <button class="secondary btn-remove-ex" data-idx="${exIndex}">Remove</button>
             </div>
           </div>
           <div class="sets">
             ${exercise.sets
               .map(
-                (set, setIndex) => `
-              <div class="set-row ${set.type} ${isCardio ? 'cardio' : ''}" data-set-idx="${setIndex}">
-                <span class="set-type">${set.type === 'warmup' ? 'W' : isCardio ? 'C' : 'S'}</span>
-                ${renderSetFields(exercise, set, exIndex, setIndex, isCardio)}
+                (set, setIndex) => {
+                  const setLabel = set.type === 'warmup' ? 'W' : isCardio ? 'C' : isTimeBased ? 'T' : 'S';
+                  return `
+              <div class="set-row ${set.type} ${isCardio ? 'cardio' : ''} ${isTimeBased ? 'time-based' : ''}" data-set-idx="${setIndex}">
+                <span class="set-type">${setLabel}</span>
+                ${renderSetFields(exercise, set, exIndex, setIndex, isCardio, isTimeBased)}
                 <button class="set-done ${set.done ? 'done' : ''}" data-idx="${exIndex}" data-set="${setIndex}">✓</button>
                 <button class="secondary btn-delete-set" data-idx="${exIndex}" data-set="${setIndex}">🗑</button>
               </div>
-            `
+            `;
+                }
               )
               .join('')}
           </div>
@@ -2135,7 +2221,7 @@ function openExerciseSelector() {
     showView('workout-view');
     renderActiveWorkout();
   };
-  renderExercises('Add to Workout');
+  renderExercises('Add to Workout', true);
 }
 
 function startRestTimer(exIdx, seconds) {
@@ -2291,6 +2377,21 @@ function formatSetSummary(ex, s) {
 
 // ─── Workout Calendar ───────────────────────────────────────────────────────
 
+function workoutLocalDate(dateValue) {
+  const d = new Date(dateValue);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA');
+}
+
+function jumpToHistoryDate(date) {
+  const cards = Array.from(document.querySelectorAll('.history-card')).filter((card) => card.dataset.localDate === date);
+  if (cards.length === 0) return;
+  cards.forEach((card) => {
+    card.classList.add('highlight-pulse');
+    card.addEventListener('animationend', () => card.classList.remove('highlight-pulse'), { once: true });
+  });
+  cards[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 function getWorkoutDates() {
   const dates = new Map();
   session.data.workouts.forEach((w) => {
@@ -2385,10 +2486,11 @@ function renderWorkoutCalendar() {
     for (let day = 1; day <= daysInMonth; day++) {
       const d = new Date(year, month, day);
       d.setHours(0, 0, 0, 0);
-      const key = d.toISOString().split('T')[0];
+      const key = d.toLocaleDateString('en-CA');
       const hasWorkout = workoutDates.has(key);
       const isToday = d.getTime() === today.getTime();
-      const classes = ['history-calendar-day', hasWorkout ? 'has-workout' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
+      const isSelected = key === selectedCalendarDate;
+      const classes = ['history-calendar-day', hasWorkout ? 'has-workout' : '', isToday ? 'today' : '', isSelected ? 'selected' : ''].filter(Boolean).join(' ');
       if (hasWorkout) {
         const title = `${workoutDates.get(key).length} workout${workoutDates.get(key).length > 1 ? 's' : ''}`;
         const labelDate = new Date(`${key}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
@@ -2444,10 +2546,10 @@ function renderWorkoutCalendar() {
       const day = e.target.closest('.history-calendar-day.has-workout');
       if (day) {
         const date = day.dataset.date;
-        const list = session.data.workouts.filter((w) => w.date.startsWith(date));
-        if (list.length === 0) return;
-        const first = document.querySelector(`[data-id="${list[0].id}"]`);
-        if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        selectedCalendarDate = date;
+        document.querySelectorAll('.history-calendar-day.selected').forEach((el) => el.classList.remove('selected'));
+        day.classList.add('selected');
+        jumpToHistoryDate(date);
       }
     });
 
@@ -2483,6 +2585,9 @@ function renderHistory(targetDate = null) {
   const container = $('history-list');
   if (targetDate) {
     historyCalendarDate = new Date(targetDate);
+    selectedCalendarDate = workoutLocalDate(targetDate);
+  } else {
+    selectedCalendarDate = null;
   }
   renderWorkoutCalendar();
   if (session.data.workouts.length === 0) {
@@ -2492,8 +2597,10 @@ function renderHistory(targetDate = null) {
 
   container.innerHTML = session.data.workouts
     .map(
-      (w) => `
-      <div class="history-card" data-id="${w.id}">
+      (w) => {
+        const localDateStr = workoutLocalDate(w.date);
+        return `
+      <div class="history-card" data-id="${w.id}" data-local-date="${localDateStr}">
         <div class="history-header">
           <div>
             <h3>${w.name}</h3>
@@ -2544,7 +2651,8 @@ function renderHistory(targetDate = null) {
           <button class="secondary btn-delete-workout" data-id="${w.id}">Delete</button>
         </div>
       </div>
-    `
+    `;
+      }
     )
     .join('');
 

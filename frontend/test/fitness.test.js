@@ -30,6 +30,8 @@ import {
   convertDistance,
   roundConverted,
   getDistanceUnit,
+  formatPlanExerciseTarget,
+  computeBadges,
 } from '../lib/fitness.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -40,6 +42,10 @@ function strengthSet(weight, reps, type = 'working') {
 
 function cardioSet(distance, durationMinutes, calories = 0, type = 'working') {
   return { type, weight: '', reps: '', distance, durationMinutes, calories, heartRate: '' };
+}
+
+function timeSet(weight, time, type = 'working') {
+  return { type, weight, reps: '', time, distance: '', durationMinutes: '', calories: '', heartRate: '' };
 }
 
 function makeWorkout({ id = nextId(), name = 'Test Workout', date, exercises = [], xp = 0, setsCount = 0 } = {}) {
@@ -233,6 +239,15 @@ describe('getPR', () => {
     const pr = getPR(workouts, 'bench_press');
     assert.strictEqual(pr.weight, 0);
   });
+
+  it('finds the longest hold time for time-based exercises', () => {
+    const timeWorkouts = [
+      makeWorkout({ exercises: [{ exerciseId: 'plank', sets: [timeSet(0, 45)] }] }),
+      makeWorkout({ exercises: [{ exerciseId: 'plank', sets: [timeSet(0, 60)] }] }),
+    ];
+    const pr = getPR(timeWorkouts, 'plank');
+    assert.strictEqual(pr.time, 60);
+  });
 });
 
 describe('getRecentPRs', () => {
@@ -382,6 +397,15 @@ describe('getExerciseRecords', () => {
     assert.strictEqual(records.distUnit, 'km');
   });
 
+  it('returns max time and weight for time-based exercises', () => {
+    const timeWorkouts = [
+      makeWorkout({ exercises: [{ exerciseId: 'plank', sets: [timeSet(0, 45), timeSet(10, 60)] }] }),
+    ];
+    const records = getExerciseRecords(timeWorkouts, 'plank', () => false);
+    assert.strictEqual(records.maxTime, 60);
+    assert.strictEqual(records.maxWeight, 10);
+  });
+
   it('includes the heaviest historical set', () => {
     const records = getExerciseRecords(strengthWorkouts, 'squat', () => false);
     assert.strictEqual(records.heaviestSet.weight, 130);
@@ -437,6 +461,11 @@ describe('xpForSet', () => {
     const lbSet = strengthSet(220.46, 10);
     assert.strictEqual(xpForSet(kgSet, 'kg'), xpForSet(lbSet, 'lbs'));
   });
+
+  it('awards XP for time-based holds using time and optional weight', () => {
+    assert.ok(xpForSet(timeSet(0, 60)) > 0);
+    assert.ok(xpForSet(timeSet(20, 60)) > xpForSet(timeSet(0, 60)));
+  });
 });
 
 describe('getBestOneRepMax', () => {
@@ -454,5 +483,103 @@ describe('getBestOneRepMax', () => {
   it('returns null when there is no usable data', () => {
     const best = getBestOneRepMax(workouts, 'bench_press');
     assert.strictEqual(best, null);
+  });
+});
+
+describe('computeBadges', () => {
+  it('returns all badges with locked state for empty stats', () => {
+    const badges = computeBadges({ totalXp: 0, tonnage: 0, workouts: 0, distance: 0, calories: 0 }, 0, 1);
+    assert.ok(badges.length > 10);
+    assert.ok(badges.every((b) => !b.unlocked));
+    assert.ok(badges.every((b) => b.progress >= 0 && b.progress < b.target));
+  });
+
+  it('unlocks volume badges based on workout count', () => {
+    const badges = computeBadges({ totalXp: 0, tonnage: 0, workouts: 10, distance: 0, calories: 0 }, 0, 1);
+    const first = badges.find((b) => b.id === 'first_workout');
+    const consistent = badges.find((b) => b.id === 'consistent');
+    const dedicated = badges.find((b) => b.id === 'dedicated');
+    assert.ok(first.unlocked);
+    assert.ok(consistent.unlocked);
+    assert.ok(!dedicated.unlocked);
+    assert.strictEqual(first.progress, 1);
+    assert.strictEqual(consistent.progress, 10);
+  });
+
+  it('unlocks strength badges based on tonnage', () => {
+    const badges = computeBadges({ totalXp: 0, tonnage: 50000, workouts: 0, distance: 0, calories: 0 }, 0, 1);
+    const heavy = badges.find((b) => b.id === 'heavy_lifter');
+    const iron = badges.find((b) => b.id === 'iron_warrior');
+    const beast = badges.find((b) => b.id === 'beast_mode');
+    assert.ok(heavy.unlocked);
+    assert.ok(iron.unlocked);
+    assert.ok(!beast.unlocked);
+  });
+
+  it('unlocks cardio badges based on distance', () => {
+    const badges = computeBadges({ totalXp: 0, tonnage: 0, workouts: 0, distance: 100, calories: 0 }, 0, 1);
+    const first = badges.find((b) => b.id === 'first_mile');
+    const runner = badges.find((b) => b.id === 'road_runner');
+    assert.ok(first.unlocked);
+    assert.ok(runner.unlocked);
+  });
+
+  it('unlocks XP badges based on total XP', () => {
+    const badges = computeBadges({ totalXp: 6000, tonnage: 0, workouts: 0, distance: 0, calories: 0 }, 0, 1);
+    const rookie = badges.find((b) => b.id === 'xp_rookie');
+    const grinder = badges.find((b) => b.id === 'xp_grinder');
+    const master = badges.find((b) => b.id === 'xp_master');
+    assert.ok(rookie.unlocked);
+    assert.ok(grinder.unlocked);
+    assert.ok(!master.unlocked);
+  });
+
+  it('unlocks streak and level badges', () => {
+    const badges = computeBadges({ totalXp: 0, tonnage: 0, workouts: 0, distance: 0, calories: 0 }, 5, 10);
+    const onFire = badges.find((b) => b.id === 'on_fire');
+    const unstoppable = badges.find((b) => b.id === 'unstoppable');
+    const risingStar = badges.find((b) => b.id === 'rising_star');
+    const guru = badges.find((b) => b.id === 'fitness_guru');
+    assert.ok(onFire.unlocked);
+    assert.ok(!unstoppable.unlocked);
+    assert.ok(risingStar.unlocked);
+    assert.ok(!guru.unlocked);
+  });
+
+  it('caps progress at the target', () => {
+    const badges = computeBadges({ totalXp: 0, tonnage: 2000000, workouts: 0, distance: 0, calories: 0 }, 0, 1);
+    const titan = badges.find((b) => b.id === 'titan');
+    assert.ok(titan.unlocked);
+    assert.strictEqual(titan.progress, titan.target);
+    assert.strictEqual(titan.progressPercent, 100);
+  });
+});
+
+describe('formatPlanExerciseTarget', () => {
+  it('formats strength targets with sets and reps', () => {
+    assert.strictEqual(formatPlanExerciseTarget({ targetSets: 3, targetReps: 8, restSeconds: 90 }, false, false, 'kg', false), '3x8');
+    assert.strictEqual(formatPlanExerciseTarget({ targetSets: 3, targetReps: 8, restSeconds: 90 }, false, false, 'kg', true), '3 sets × 8 reps • 90s rest');
+  });
+
+  it('falls back for missing strength reps', () => {
+    assert.strictEqual(formatPlanExerciseTarget({ targetSets: 3, targetReps: 0, restSeconds: 90 }, false, false, 'kg', false), '3 sets');
+    assert.strictEqual(formatPlanExerciseTarget({ targetSets: 3, restSeconds: 90 }, false, false, 'kg', true), '3 sets • 90s rest');
+  });
+
+  it('formats time-based targets and falls back when time is missing', () => {
+    assert.strictEqual(formatPlanExerciseTarget({ targetSets: 3, targetTime: 30, restSeconds: 60 }, false, true, 'kg', false), '3x30s');
+    assert.strictEqual(formatPlanExerciseTarget({ targetSets: 3, targetTime: 0, restSeconds: 60 }, false, true, 'kg', true), '3 sets • 60s rest');
+    assert.strictEqual(formatPlanExerciseTarget({ targetSets: 3, restSeconds: 60 }, false, true, 'kg', false), '3 sets');
+  });
+
+  it('formats cardio targets and falls back when values are missing', () => {
+    assert.strictEqual(formatPlanExerciseTarget({ targetDistance: 5, targetDuration: 30 }, true, false, 'kg', false), '5km in 30m');
+    assert.strictEqual(formatPlanExerciseTarget({ targetDistance: 5 }, true, false, 'kg', false), '5km');
+    assert.strictEqual(formatPlanExerciseTarget({ targetDuration: 30 }, true, false, 'kg', false), '30m');
+    assert.strictEqual(formatPlanExerciseTarget({}, true, false, 'kg', false), 'Cardio');
+    assert.strictEqual(formatPlanExerciseTarget({}, true, false, 'kg', true), 'Cardio');
+    assert.strictEqual(formatPlanExerciseTarget({ targetDistance: 5 }, true, false, 'kg', true), '5 km');
+    assert.strictEqual(formatPlanExerciseTarget({ targetDuration: 30 }, true, false, 'kg', true), '30 min');
+    assert.strictEqual(formatPlanExerciseTarget({ targetDistance: 3.1, targetDuration: 20 }, true, false, 'lbs', true), '3.1 mi • 20 min');
   });
 });

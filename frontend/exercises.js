@@ -44,7 +44,7 @@ const EXERCISE_CATALOG = [
   { id: 'hip_thrust', name: 'Hip Thrust', category: 'Glutes', equipment: 'Barbell', defaultRestSeconds: 120 },
   { id: 'glute_bridge', name: 'Glute Bridge', category: 'Glutes', equipment: 'Bodyweight', defaultRestSeconds: 90 },
   { id: 'ab_wheel', name: 'Ab Wheel', category: 'Core', equipment: 'Bodyweight', defaultRestSeconds: 60 },
-  { id: 'plank', name: 'Plank', category: 'Core', equipment: 'Bodyweight', defaultRestSeconds: 60 },
+  { id: 'plank', name: 'Plank', category: 'Core', equipment: 'Bodyweight', defaultRestSeconds: 60, timeBased: true },
   { id: 'hanging_leg_raise', name: 'Hanging Leg Raise', category: 'Core', equipment: 'Bodyweight', defaultRestSeconds: 90 },
 ];
 
@@ -52,7 +52,7 @@ function getExerciseById(id) {
   return EXERCISE_CATALOG.find((ex) => ex.id === id);
 }
 
-export { EXERCISE_CATALOG, getExerciseById, searchExercises, getExercisesByCategory, CATEGORIES };
+export { EXERCISE_CATALOG, getExerciseById, searchExercises, getExercisesByCategory, isTimeBasedExercise, CATEGORIES };
 
 function searchExercises(query, catalog = EXERCISE_CATALOG) {
   const q = query.toLowerCase().trim();
@@ -118,6 +118,11 @@ function fuzzySequenceScore(text, query) {
 function getExercisesByCategory(category) {
   if (!category || category === 'All') return EXERCISE_CATALOG;
   return EXERCISE_CATALOG.filter((ex) => ex.category === category);
+}
+
+function isTimeBasedExercise(id) {
+  const ex = getExerciseById(id);
+  return ex ? !!ex.timeBased : false;
 }
 
 const CATEGORIES = ['All', ...new Set(EXERCISE_CATALOG.map((ex) => ex.category))];

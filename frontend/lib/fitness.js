@@ -5,6 +5,8 @@
  * so they can be unit tested in Node with no special setup.
  */
 
+import { isTimeBasedExercise } from '../exercises.js';
+
 const KG_PER_LB = 0.45359237;
 const KM_PER_MI = 1.609344;
 
@@ -19,6 +21,41 @@ function convertWeight(value, fromUnit, toUnit) {
 
 function getDistanceUnit(units) {
   return units === 'lbs' ? 'mi' : 'km';
+}
+
+/**
+ * Formats a plan exercise target summary for any workout type.
+ * Falls back gracefully when target values are missing/empty.
+ */
+function formatPlanExerciseTarget(ex, isCardio, isTimeBased, units, detailed = false) {
+  if (isCardio) {
+    const dist = ex.targetDistance || 0;
+    const dur = ex.targetDuration || 0;
+    const distUnit = getDistanceUnit(units);
+    if (dist > 0 && dur > 0) return detailed ? `${dist} ${distUnit} • ${dur} min` : `${dist}${distUnit} in ${dur}m`;
+    if (dist > 0) return detailed ? `${dist} ${distUnit}` : `${dist}${distUnit}`;
+    if (dur > 0) return detailed ? `${dur} min` : `${dur}m`;
+    return 'Cardio';
+  }
+
+  const sets = ex.targetSets || 1;
+  const rest = ex.restSeconds || 0;
+
+  if (isTimeBased) {
+    const time = ex.targetTime || 0;
+    if (detailed) {
+      const timeStr = time > 0 ? ` × ${time} sec` : '';
+      return `${sets} sets${timeStr} • ${rest}s rest`;
+    }
+    return time > 0 ? `${sets}x${time}s` : `${sets} sets`;
+  }
+
+  const reps = ex.targetReps || 0;
+  if (detailed) {
+    const repsStr = reps > 0 ? ` × ${reps} reps` : '';
+    return `${sets} sets${repsStr} • ${rest}s rest`;
+  }
+  return reps > 0 ? `${sets}x${reps}` : `${sets} sets`;
 }
 
 function convertDistance(value, fromUnit, toUnit) {
@@ -61,6 +98,10 @@ function xpForSet(set, units = 'kg') {
   // XP is always based on the actual weight in kg so it doesn't drift when units change.
   const weightDisplay = set.weight || 0;
   const weightKg = units === 'lbs' ? weightDisplay * KG_PER_LB : weightDisplay;
+  if (set.time > 0) {
+    // Time-based holds: scale XP by hold time (seconds) and optional added weight.
+    return Math.max(1, Math.round((set.time / 60) * 10 + weightKg * (set.time / 60) * 0.15));
+  }
   const reps = set.reps || 0;
   return weightKg > 0 && reps > 0 ? Math.round(weightKg * reps * 0.15) : 0;
 }
@@ -91,6 +132,11 @@ function getCaloriesForSet(set, isCardio, units) {
     return calculateCardioCalories(set, units);
   }
   const weight = Number(set.weight);
+  if (set.time > 0) {
+    // Time-based holds: estimate calories from hold time and optional weight.
+    const weightKg = weight > 0 ? convertWeight(weight, units, 'kg') : 70;
+    return Math.round((set.time / 60) * weightKg * 0.05);
+  }
   const reps = Number(set.reps);
   if (!weight || weight <= 0 || !reps || reps <= 0) return 0;
   const weightKg = convertWeight(weight, units, 'kg');
@@ -123,6 +169,81 @@ function getLevel(totalXp) {
   return Math.max(1, Math.floor(Math.sqrt((totalXp || 0) / 100)) + 1);
 }
 
+// ─── Badges ─────────────────────────────────────────────────────────────────
+
+const BADGE_DEFINITIONS = [
+  // Volume
+  { id: 'first_workout', name: 'First Step', description: 'Complete your first workout', icon: '🏃', tier: 'bronze', category: 'Volume', progress: (s) => Math.min(s.workouts, 1), target: 1 },
+  { id: 'consistent', name: 'Consistent', description: 'Complete 10 workouts', icon: '🔥', tier: 'silver', category: 'Volume', progress: (s) => Math.min(s.workouts, 10), target: 10 },
+  { id: 'dedicated', name: 'Dedicated', description: 'Complete 50 workouts', icon: '⚡', tier: 'gold', category: 'Volume', progress: (s) => Math.min(s.workouts, 50), target: 50 },
+  { id: 'workout_legend', name: 'Workout Legend', description: 'Complete 100 workouts', icon: '👑', tier: 'diamond', category: 'Volume', progress: (s) => Math.min(s.workouts, 100), target: 100 },
+
+  // Strength
+  { id: 'heavy_lifter', name: 'Heavy Lifter', description: 'Move 10,000 kg of total volume', icon: '🏋️', tier: 'bronze', category: 'Strength', progress: (s) => Math.min(s.tonnage, 10000), target: 10000 },
+  { id: 'iron_warrior', name: 'Iron Warrior', description: 'Move 50,000 kg of total volume', icon: '🦾', tier: 'silver', category: 'Strength', progress: (s) => Math.min(s.tonnage, 50000), target: 50000 },
+  { id: 'beast_mode', name: 'Beast Mode', description: 'Move 250,000 kg of total volume', icon: '🐻', tier: 'gold', category: 'Strength', progress: (s) => Math.min(s.tonnage, 250000), target: 250000 },
+  { id: 'titan', name: 'Titan', description: 'Move 1,000,000 kg of total volume', icon: '⚔️', tier: 'diamond', category: 'Strength', progress: (s) => Math.min(s.tonnage, 1000000), target: 1000000 },
+
+  // Cardio
+  { id: 'first_mile', name: 'First Mile', description: 'Travel 1 km of cardio distance', icon: '🏃', tier: 'bronze', category: 'Cardio', progress: (s) => Math.min(s.distance, 1), target: 1 },
+  { id: 'road_runner', name: 'Road Runner', description: 'Travel 50 km of cardio distance', icon: '🦅', tier: 'silver', category: 'Cardio', progress: (s) => Math.min(s.distance, 50), target: 50 },
+  { id: 'marathoner', name: 'Marathoner', description: 'Travel 500 km of cardio distance', icon: '🏅', tier: 'gold', category: 'Cardio', progress: (s) => Math.min(s.distance, 500), target: 500 },
+  { id: 'ultra_runner', name: 'Ultra Runner', description: 'Travel 2,000 km of cardio distance', icon: '🔥', tier: 'diamond', category: 'Cardio', progress: (s) => Math.min(s.distance, 2000), target: 2000 },
+
+  // XP
+  { id: 'xp_rookie', name: 'XP Rookie', description: 'Earn 1,000 XP', icon: '🌱', tier: 'bronze', category: 'XP', progress: (s) => Math.min(s.totalXp, 1000), target: 1000 },
+  { id: 'xp_grinder', name: 'XP Grinder', description: 'Earn 5,000 XP', icon: '⭐', tier: 'silver', category: 'XP', progress: (s) => Math.min(s.totalXp, 5000), target: 5000 },
+  { id: 'xp_master', name: 'XP Master', description: 'Earn 20,000 XP', icon: '💫', tier: 'gold', category: 'XP', progress: (s) => Math.min(s.totalXp, 20000), target: 20000 },
+  { id: 'xp_legend', name: 'XP Legend', description: 'Earn 100,000 XP', icon: '✨', tier: 'diamond', category: 'XP', progress: (s) => Math.min(s.totalXp, 100000), target: 100000 },
+
+  // Streak
+  { id: 'on_fire', name: 'On Fire', description: 'Log workouts 3 days in a row', icon: '🔥', tier: 'bronze', category: 'Streak', progress: (s, streak) => Math.min(streak, 3), target: 3 },
+  { id: 'unstoppable', name: 'Unstoppable', description: 'Log workouts 7 days in a row', icon: '⚡', tier: 'silver', category: 'Streak', progress: (s, streak) => Math.min(streak, 7), target: 7 },
+  { id: 'streak_beast', name: 'Streak Beast', description: 'Log workouts 14 days in a row', icon: '🦍', tier: 'gold', category: 'Streak', progress: (s, streak) => Math.min(streak, 14), target: 14 },
+
+  // Level
+  { id: 'rising_star', name: 'Rising Star', description: 'Reach Level 5', icon: '🌟', tier: 'bronze', category: 'Level', progress: (s, streak, level) => Math.min(level, 5), target: 5 },
+  { id: 'fitness_guru', name: 'Fitness Guru', description: 'Reach Level 25', icon: '👑', tier: 'gold', category: 'Level', progress: (s, streak, level) => Math.min(level, 25), target: 25 },
+];
+
+/**
+ * Compute all available badges and the user's progress toward each.
+ *
+ * @param {Object} stats - Result of computeStats ({ totalXp, tonnage, workouts, distance, calories })
+ * @param {number} streak - Current streak (e.g. from currentStreak())
+ * @param {number} level - Current level (e.g. from getLevel())
+ * @returns {Object[]} Ordered array of badge objects with progress, target, unlocked, etc.
+ */
+function computeBadges(stats, streak = 0, level = 1) {
+  const safeStats = stats || {};
+  const badgeStats = {
+    totalXp: safeStats.totalXp || 0,
+    tonnage: safeStats.tonnage || 0,
+    workouts: safeStats.workouts || 0,
+    distance: safeStats.distance || 0,
+    calories: safeStats.calories || 0,
+  };
+
+  return BADGE_DEFINITIONS.map((def) => {
+    const progress = def.progress(badgeStats, streak, level);
+    const target = def.target;
+    const unlocked = progress >= target;
+    const progressPercent = Math.min(100, Math.round((progress / target) * 100));
+    return {
+      id: def.id,
+      name: def.name,
+      description: def.description,
+      icon: def.icon,
+      tier: def.tier,
+      category: def.category,
+      progress,
+      target,
+      unlocked,
+      progressPercent,
+    };
+  });
+}
+
 function xpToNextLevel(totalXp) {
   const currentLevel = getLevel(totalXp);
   const next = currentLevel * currentLevel * 100;
@@ -131,14 +252,19 @@ function xpToNextLevel(totalXp) {
 }
 
 function getPR(workouts, exerciseId) {
-  let pr = { weight: 0, reps: 0, date: null };
+  let pr = { weight: 0, reps: 0, time: 0, date: null };
+  const isTimeBased = isTimeBasedExercise(exerciseId);
   workouts.forEach((w) => {
     w.exercises.forEach((e) => {
       if (e.exerciseId !== exerciseId) return;
       e.sets.forEach((s) => {
         if (s.type !== 'working') return;
-        if (s.weight > pr.weight || (s.weight === pr.weight && s.reps > pr.reps)) {
-          pr = { weight: s.weight, reps: s.reps, date: w.date };
+        if (isTimeBased) {
+          if (s.time > pr.time || (s.time === pr.time && s.weight > pr.weight)) {
+            pr = { weight: s.weight, time: s.time, reps: 0, date: w.date };
+          }
+        } else if (s.weight > pr.weight || (s.weight === pr.weight && s.reps > pr.reps)) {
+          pr = { weight: s.weight, reps: s.reps, time: 0, date: w.date };
         }
       });
     });
@@ -153,7 +279,7 @@ function getRecentPRs(workouts, limit = 3, getExerciseName) {
     w.exercises.forEach((e) => {
       if (seen.has(e.exerciseId)) return;
       const pr = getPR(workouts, e.exerciseId);
-      if (pr.weight > 0) {
+      if (pr.weight > 0 || pr.reps > 0 || pr.time > 0) {
         all.push({ exerciseId: e.exerciseId, name: getExerciseName ? getExerciseName(e.exerciseId) : undefined, ...pr });
         seen.add(e.exerciseId);
       }
@@ -238,6 +364,7 @@ function getExerciseHistory(workouts, exerciseId, units = 'kg') {
         setIndex: i,
         weight: Number(s.weight) || 0,
         reps: Number(s.reps) || 0,
+        time: Number(s.time) || 0,
         distance,
         durationMinutes,
         oneRm,
@@ -276,6 +403,11 @@ function getExerciseRecords(workouts, exerciseId, isCardioFn, units = 'kg') {
     const maxSpeed = history.reduce((max, h) => Math.max(max, h.speed), 0);
     return { distance, duration, maxSpeed, distUnit: getDistanceUnit(units) };
   }
+  if (isTimeBasedExercise(exerciseId)) {
+    const maxTime = history.reduce((max, h) => Math.max(max, h.time), 0);
+    const maxWeight = history.reduce((max, h) => Math.max(max, h.weight), 0);
+    return { maxTime, maxWeight };
+  }
   const maxWeight = history.reduce((max, h) => Math.max(max, h.weight), 0);
   const maxReps = history.reduce((max, h) => Math.max(max, h.reps), 0);
   const best1rm = history.reduce((max, h) => Math.max(max, h.oneRm), 0);
@@ -307,4 +439,6 @@ export {
   convertDistance,
   roundConverted,
   getDistanceUnit,
+  formatPlanExerciseTarget,
+  computeBadges,
 };

@@ -13,6 +13,7 @@ function createSet(type = 'working', lastSetValues = null) {
     type,
     weight: lastSetValues ? lastSetValues.weight : '',
     reps: lastSetValues ? lastSetValues.reps : '',
+    time: lastSetValues ? lastSetValues.time : '',
     rpe: lastSetValues ? lastSetValues.rpe : '',
     distance: lastSetValues ? lastSetValues.distance : '',
     durationMinutes: lastSetValues ? lastSetValues.durationMinutes : '',
@@ -23,12 +24,13 @@ function createSet(type = 'working', lastSetValues = null) {
   };
 }
 
-function createWorkoutExercise(exerciseId, targetSets, targetReps, restSeconds, lastSetValues = null) {
+function createWorkoutExercise(exerciseId, targetSets, targetReps, restSeconds, lastSetValues = null, targetTime = null) {
   return {
     id: crypto.randomUUID(),
     exerciseId,
     targetSets,
     targetReps,
+    targetTime,
     restSeconds,
     sets: [createSet('working', lastSetValues)],
   };
@@ -43,6 +45,7 @@ function normalizeSet(set, units = 'kg') {
     ...set,
     weight: normalizeSetValue(set.weight),
     reps: normalizeSetValue(set.reps),
+    time: normalizeSetValue(set.time),
     distance: normalizeSetValue(set.distance),
     durationMinutes: normalizeSetValue(set.durationMinutes),
     heartRate: normalizeSetValue(set.heartRate),

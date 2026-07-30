@@ -46,6 +46,13 @@ describe('createWorkoutExercise', () => {
     assert.equal(ex.sets[0].weight, 120);
     assert.equal(ex.sets[0].reps, 8);
   });
+
+  test('applies last-set time to time-based exercises', () => {
+    const last = { weight: '', reps: '', time: 60, rpe: '', distance: '', durationMinutes: '', heartRate: '', calories: '' };
+    const ex = createWorkoutExercise('plank', 3, null, 60, last, 45);
+    assert.equal(ex.targetTime, 45);
+    assert.equal(ex.sets[0].time, 60);
+  });
 });
 
 describe('toggleSetStatus', () => {

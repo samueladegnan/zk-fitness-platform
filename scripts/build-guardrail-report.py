@@ -9,7 +9,6 @@ window.GUARDRAIL_REPORTS data structure.
 
 import json
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -95,7 +94,6 @@ def build() -> None:
     reports = {
         "backend": backend_report,
         "frontend": frontend_report,
-        "timestamp": datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC"),
     }
 
     guardrail_html = root / "guardrail.html"

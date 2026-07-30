@@ -41,12 +41,6 @@
       if (dashboardEl) dashboardEl.style.display = "none";
     }
 
-    const timestampEl = document.getElementById("report-timestamp");
-    if (timestampEl && reports.timestamp) {
-      timestampEl.textContent = reports.timestamp;
-    } else if (timestampEl) {
-      timestampEl.textContent = "Pending first CI run";
-    }
 
     function renderReport(name, report) {
       const container = document.getElementById(name + "-report");

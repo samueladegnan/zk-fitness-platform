@@ -350,6 +350,7 @@
 
 .guardrail-table {
   width: 100%;
+  min-width: 650px;
   border-collapse: collapse;
   font-size: 0.95rem;
   background: var(--gr-card-bg);
