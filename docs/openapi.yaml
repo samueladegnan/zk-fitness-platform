@@ -136,11 +136,11 @@ paths:
         - sessionCookie: []
       responses:
         '200':
-          description: Encrypted payload
+          description: Encrypted payload or empty payload marker
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SyncPayload'
+                $ref: '#/components/schemas/SyncResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -155,14 +155,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SyncPayload'
+              $ref: '#/components/schemas/SyncData'
       responses:
         '200':
           description: Sync stored
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SyncPayload'
+                $ref: '#/components/schemas/SyncStored'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -231,6 +231,12 @@ components:
         solution:
           type: integer
           description: Proof-of-work solution
+        inviteCode:
+          type: string
+          description: Optional invite code when REGISTRATION_INVITE_CODE is configured
+        website:
+          type: string
+          description: Honeypot field; if filled, the request is rejected
 
     LoginRequest:
       type: object
@@ -248,19 +254,42 @@ components:
         username:
           type: string
 
-    SyncPayload:
+    SyncData:
       type: object
-      required: [iv, ciphertext]
+      required: [encryptedBlob, kemCiphertext]
       properties:
-        iv:
+        encryptedBlob:
           type: string
-          description: Base64 AES-GCM IV
-        ciphertext:
-          type: string
-          description: Base64 AES-GCM ciphertext
+          description: Base64 JSON object containing the AES-GCM IV and ciphertext
         kemCiphertext:
           type: string
           description: Base64 ML-KEM-768 ciphertext wrapping the AES key
+
+    SyncResponse:
+      type: object
+      required: [exists]
+      properties:
+        exists:
+          type: boolean
+        encryptedBlob:
+          type: string
+          nullable: true
+          description: Base64 JSON object containing the AES-GCM IV and ciphertext (null when exists is false)
+        kemCiphertext:
+          type: string
+          nullable: true
+          description: Base64 ML-KEM-768 ciphertext wrapping the AES key (null when exists is false)
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the last sync (null when exists is false)
+
+    SyncStored:
+      type: object
+      properties:
+        message:
+          type: string
 
   responses:
     BadRequest:

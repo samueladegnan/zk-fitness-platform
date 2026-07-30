@@ -1007,13 +1007,13 @@ function renderDashboard() {
   if (unlockedBadges.length === 0) {
     badgeHtml += '<div class="badge-empty"><span class="badge-empty-icon" aria-hidden="true">🏅</span><p class="muted">Finish a workout and your first badge will land here.</p></div>';
   } else {
-    badgeHtml += `<div class="earned-badges-grid">${unlockedBadges.map((b) => {
+    badgeHtml += unlockedBadges.map((b) => {
       return `<article class="badge-card earned" data-tier="${b.tier}">
         <span class="badge-card-icon" aria-hidden="true">${b.icon}</span>
         <h4 class="badge-card-title">${escapeHtml(b.name)}</h4>
         <p class="badge-card-desc">${escapeHtml(b.description)}</p>
       </article>`;
-    }).join('')}</div>`;
+    }).join('');
   }
 
   badgeContainer.innerHTML = badgeHtml;
@@ -2873,24 +2873,28 @@ async function loadSync() {
     console.error('Failed to load local sync data:', localErr);
   }
 
-  // Then attempt to refresh from the cloud when a backend is configured.
-  if (isBackendLikelyConfigured()) {
+  // Determine whether the backend is a remote cloud instance or a local dev server.
+  const backendIsRemote = isBackendLikelyConfigured() && !API_BASE.includes('localhost') && !API_BASE.includes('127.0.0.1');
+
+  // Then attempt to refresh from the backend when one is configured.
+  // In local-only mode, all state lives in browser storage, so skip the backend fetch.
+  if (!isLocalMode && isBackendLikelyConfigured()) {
     try {
       const res = await api('/sync');
       if (res.exists && res.encryptedBlob) {
         const encrypted = JSON.parse(res.encryptedBlob);
         if (res.kemCiphertext) encrypted.kemCiphertext = res.kemCiphertext;
-        if (!isLocalMode && !encrypted.kemCiphertext && !session.kemKeyPair) {
+        if (!encrypted.kemCiphertext && !session.kemKeyPair) {
           throw new Error('No KEM keypair available to decrypt sync data.');
         }
-        const key = isLocalMode ? session.encKey : session.kemKeyPair.secretKey;
+        const key = session.kemKeyPair.secretKey;
         cloudData = await decryptData(encrypted, key);
         // Keep the local copy in sync without re-encrypting.
         await saveLocalData(session.username || 'demo', res.encryptedBlob, res.kemCiphertext || '');
       }
     } catch (err) {
       reportApiError(err, (failure) => {
-        if (status) status.textContent = localData ? 'Cloud sync unavailable. Working from local copy.' : 'Cloud sync unavailable.';
+        if (status) status.textContent = localData ? 'Backend sync unavailable. Working from local copy.' : 'Backend sync unavailable.';
       });
     }
   } else if (status) {
@@ -2898,22 +2902,24 @@ async function loadSync() {
   }
 
   // Choose the most recently updated copy. Fallback order: local > cloud > fresh.
+  // Apply the best available data and label the source accurately.
+  const syncLabelRemote = backendIsRemote ? 'Encrypted state synced from cloud.' : 'Encrypted state synced from backend.';
   if (localData && cloudData) {
     const localTime = localData.updatedAt || 0;
     const cloudTime = cloudData.updatedAt || 0;
     if (cloudTime >= localTime) {
       session.data = { ...session.data, ...cloudData };
-      if (status) status.textContent = 'Encrypted state synced from cloud.';
+      if (status) status.textContent = syncLabelRemote;
     } else {
       session.data = { ...session.data, ...localData };
-      if (status) status.textContent = 'Loaded encrypted state from local storage.';
+      if (status) status.textContent = isLocalMode ? 'Loaded local data.' : 'Loaded encrypted state from local storage.';
     }
   } else if (localData) {
     session.data = { ...session.data, ...localData };
-    if (status) status.textContent = 'Loaded encrypted state from local storage.';
+    if (status) status.textContent = isLocalMode ? 'Loaded local data.' : 'Loaded encrypted state from local storage.';
   } else if (cloudData) {
     session.data = { ...session.data, ...cloudData };
-    if (status) status.textContent = 'Encrypted state synced from cloud.';
+    if (status) status.textContent = syncLabelRemote;
   }
 
   if (!session.data.plans) session.data.plans = seedPlans();

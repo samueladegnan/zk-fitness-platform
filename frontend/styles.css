@@ -453,13 +453,6 @@ button.small { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
 .badge-card[data-tier="gold"]:hover { box-shadow: 0 8px 20px rgba(245, 158, 11, 0.18); }
 .badge-card[data-tier="diamond"]:hover { box-shadow: 0 8px 20px rgba(34, 211, 238, 0.18); }
 
-/* Earned badges grid */
-.earned-badges-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 0.75rem;
-}
-
 /* Empty badge state */
 .badge-empty {
   grid-column: 1 / -1;

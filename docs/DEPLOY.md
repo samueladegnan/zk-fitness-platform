@@ -33,17 +33,19 @@ This repository includes `render.yaml`, a Render Blueprint.
    |---|---|
    | `DATABASE_URL` | Neon connection string from Step 1 |
    | `JWT_SECRET` | Strong random secret (see below) |
-   | `CLIENT_ORIGIN` | Your GitHub Pages origin, e.g. `https://<username>.github.io` |Generate a secret with:
+   | `CLIENT_ORIGIN` | Your GitHub Pages origin, e.g. `https://<username>.github.io` |
 
-  ```bash
-  node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-  ```
+   Generate a secret with:
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+   ```
 
    Paste the output into `JWT_SECRET`. Do not commit it.
 
-7. (Optional) Set `LOG_LEVEL` to control backend logging. The backend uses Pino for structured JSON logs. In production it defaults to `info`; set it to `debug` for more detail, or `warn` for quieter output.
+6. (Optional) Set `LOG_LEVEL` to control backend logging. The backend uses Pino for structured JSON logs. In production it defaults to `info`; set it to `debug` for more detail, or `warn` for quieter output.
 
-6. Redeploy if necessary. The `start:prod` command runs database migrations automatically, and the `/api/health` endpoint verifies that the API and database are both reachable.
+7. Redeploy if necessary. The `start:prod` command runs database migrations automatically, and the `/api/health` endpoint verifies that the API and database are both reachable.
 
 After deployment, the backend is available at the service URL Render provides. With the default service name in `render.yaml`, the URL is:
 

@@ -85,7 +85,6 @@ This project uses **vanilla JavaScript** with **JSDoc type annotations** and a `
 | Observability | Pino structured logging, DB-aware `/api/health` |
 | Container | Docker, Docker Compose |
 | CI/CD | GitHub Actions |
-| Mobile Wrappers | Capacitor (iOS/Android) |
 | Desktop Wrappers | Tauri (Windows/Mac/Linux) |
 
 ## Portfolio Ecosystem
@@ -143,12 +142,19 @@ npm run dev:client   # serves the frontend on http://localhost:3001
 
 Open `http://localhost:3001`, register an account, and start a workout.
 
-> **Note:** The Argon2 WebAssembly binary is vendored in `frontend/vendor/argon2.min.js` so the app works offline. Run `npm install` at the project root to refresh this vendored asset when updating `argon2-browser`.
+> **Note:** The Argon2 WebAssembly binary is vendored to `frontend/vendor/argon2.min.js` and the post-quantum helper is vendored to `frontend/vendor/noble-pqc.js` so the app works offline. After installing dependencies, build the vendored assets:
+>
+> ```bash
+> npm run copy-argon2
+> npm run build:pqc
+> ```
+>
+> Run these again whenever you update `argon2-browser` or `@noble/post-quantum`.
 
 ### Stop services
 
 ```bash
-npm run dev:stop   # kills any process on ports 3000, 3001, and 5432
+npm run dev:stop   # kills any process on ports 3000 and 3001
 ```
 
 ## Deploy the Backend
@@ -159,7 +165,7 @@ To enable authentication and encrypted sync, deploy the backend to Render with a
 
 - **Port 3000 already in use**: Run `npm run dev:stop`, or on Windows use `npx kill-port 3000`.
 - **CORS errors in development**: Make sure `NODE_ENV=development` is set (it is the default in `backend/.env.example`).
-- **Argon2 not loading**: Run `npm install` at the project root to vendor `frontend/vendor/argon2.min.js`.
+- **Argon2 not loading**: Run `npm run copy-argon2` (and `npm run build:pqc` if Noble PQC is missing) at the project root to rebuild the vendored assets.
 
 ## API Overview
 
@@ -195,40 +201,15 @@ Registration requires solving a server-issued proof-of-work challenge on the cli
 
 This is a live portfolio demonstration of a zero-knowledge fitness platform. The web app and PWA are feature-complete and publicly deployed, while the backend can be self-hosted or deployed to Render for testing. Encrypted data is persisted locally with IndexedDB, so workouts survive app restarts and work offline.
 
-## Workout Tracking Features
-
-The app provides a complete, user-friendly workout tracking experience:
-
-- **Active Workout**: live workout timer, set logging, auto-generated warmup sets, and the ability to add or edit exercises and sets mid-workout.
-- **Plans & History**: create reusable workout templates, edit or delete past workouts, and review your full training history.
-- **Exercise Database**: browse built-in exercises or add custom ones with category and equipment metadata.
-- **Records & Analytics**: view personal records, progress charts, and one-rep-max estimates computed locally on your device.
-
 ## Release Platforms
 
-ZK Fitness is built as a web-first PWA, so it can be shipped to every major platform with minimal additional configuration.
+ZK Fitness is built as a web-first PWA, so it can be shipped to web and desktop users, or self-hosted with Docker.
 
 ### Web / PWA (GitHub Pages)
 
 1. Push to `main`.
 2. GitHub Actions runs `.github/workflows/pages.yml` and deploys to `https://<username>.github.io/zk-fitness-platform/`.
 3. Users visit the site and tap **Add to Home Screen** to install the PWA.
-
-### iOS & Android (Capacitor)
-
-1. Add Capacitor platforms (run once):
-   ```bash
-   npm install -D @capacitor/cli @capacitor/core @capacitor/ios @capacitor/android
-   npx cap add ios
-   npx cap add android
-   ```
-2. Sync the web build into the native projects:
-   ```bash
-   npx cap sync
-   ```
-3. Open and publish:
-   - **iOS**: `npx cap open ios`, then archive and upload via Xcode to App Store Connect.
-   - **Android**: `npx cap open android`, then generate a signed AAB and upload to Google Play Console.
 
 ### Desktop (Tauri)
 
