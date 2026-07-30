@@ -28,7 +28,7 @@ This platform shifts trust to the client. The server stores only public keys and
 
 - **Zero-Knowledge, Post-Quantum Privacy**: client-side AES-256-GCM encryption with Argon2id-derived keys; ML-DSA-65 authentication and ML-KEM-768 key encapsulation for sync.
 - **Workout Logging & Planning**: log strength and cardio sessions, build reusable workout plans, browse a custom exercise database, view records, charts, and one-rep-max estimates.
-- **User-Friendly Experience**: clean, responsive UI with an active workout mode, editable mid-workout data, persistent state, and dark mode.
+- **Offline-First Client Architecture**: buildless vanilla-JS SPA with IndexedDB persistence, service worker caching, and state that survives app restarts.
 - **Local Mode**: try the full app without an account; data stays on your device.
 - **Cross-Device Sync**: encrypted state syncs across authenticated devices.
 - **Progressive Web App**: installable on mobile and desktop with an offline service worker.
@@ -90,7 +90,7 @@ This project uses **vanilla JavaScript** with **JSDoc type annotations** and a `
 
 ## Portfolio Ecosystem
 
-- **AI CI/CD Security Guardrail**: `.github/workflows/ai-guardrail.yml` generates an ESLint SARIF report from the ZK Fitness codebase and triages it with `samueladegnan/ai-cicd-security-guardrail@v1.1.0`. The latest output is committed to `guardrail.html` and shown as the **Security Report**.
+- **AI CI/CD Security Guardrail**: `.github/workflows/ai-guardrail.yml` generates an ESLint SARIF report from the ZK Fitness codebase and triages it with `samueladegnan/ai-cicd-security-guardrail@v1.1.0`. The latest output is committed to `guardrail.html` and shown as the **Security Report**. When the scan finds real issues, those are displayed; when no issues are found, example placeholders are shown so the dashboard is never empty.
 
 ### Enabling Cross-Project Integrations
 

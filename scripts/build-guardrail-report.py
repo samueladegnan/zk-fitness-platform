@@ -82,12 +82,12 @@ def build() -> None:
     backend_report = load_json_report(root / "backend-guardrail-report.json")
     frontend_report = load_json_report(root / "frontend-guardrail-report.json")
 
-    if backend_report is None:
+    if backend_report is None or not backend_report.get("results"):
         backend_report = {**EXAMPLE_BACKEND, "isExample": True}
     else:
         backend_report["isExample"] = False
 
-    if frontend_report is None:
+    if frontend_report is None or not frontend_report.get("results"):
         frontend_report = {**EXAMPLE_FRONTEND, "isExample": True}
     else:
         frontend_report["isExample"] = False

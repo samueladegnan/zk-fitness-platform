@@ -1,6 +1,6 @@
 ## AI-Driven CI/CD Security Guardrail Report
 
-**Note:** 👋 Hi, I'm an example finding for the guardrail tool! This is a demonstration entry shown when the real scan returns no findings.
+**Note:** 👋 Hi, I'm an example finding for the guardrail tool! This is a demonstration entry shown when the real scan finds no issues.
 
 ### Summary
 - **Total findings triaged:** 1

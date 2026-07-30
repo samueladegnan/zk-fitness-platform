@@ -74,13 +74,17 @@
     _scaffold() {
       this.container.innerHTML = [
         '<div class="summary-card" id="' + this.id + '-summary">',
-        '  <div class="summary-header">',
-        '    <div>',
-        '      <h3 class="summary-title">Executive Summary</h3>',
-        '      <p class="summary-subtitle">Guardrail triage results</p>',
-        '    </div>',
-        '    <div id="' + this.id + '-ci-verdict" class="ci-verdict-badge"></div>',
+        '    <div class="summary-header">',
+        '      <div>',
+        '        <h3 class="summary-title">Executive Summary</h3>',
+        '        <p class="summary-subtitle">Guardrail triage results</p>',
+        '      </div>',
+        '      <div class="summary-header-actions">',
+        '        <span id="' + this.id + '-example-badge" class="example-badge" style="display:none;" title="These findings are placeholders for demonstration">Example Data</span>',
+        '        <div id="' + this.id + '-ci-verdict" class="ci-verdict-badge"></div>',
+        '      </div>',
         '  </div>',
+
         '  <div class="summary-metrics">',
         '    <div class="metric-card metric-total" role="button" tabindex="0" data-verdict="all" aria-label="Show all findings">',
         '      <span class="metric-value" data-metric="total">0</span>',
@@ -203,6 +207,8 @@
         unclear: 0
       };
 
+      const isExample = !!report.isExample;
+
       const results = (report.results || []).map(function (r) {
         const finding = r.finding || r;
         return {
@@ -225,6 +231,7 @@
       });
 
       return {
+        isExample: isExample,
         summary: {
           total: summary.total || results.length,
           high_priority: summary.high_priority || results.filter(function (r) { return r.verdict === "HIGH_PRIORITY"; }).length,
@@ -259,6 +266,11 @@
       if (highEl) highEl.textContent = summary.high_priority;
       if (fpEl) fpEl.textContent = summary.false_positive;
       if (unclearEl) unclearEl.textContent = summary.unclear;
+
+      const exampleBadge = this._element("example-badge");
+      if (exampleBadge) {
+        exampleBadge.style.display = this.report && this.report.isExample ? "inline-flex" : "none";
+      }
 
       const ciBadge = this._element("ci-verdict");
       if (summary.high_priority > 0) {
@@ -328,7 +340,7 @@
       if (filterSelect) filterSelect.value = verdict;
 
       this.container.querySelectorAll(".metric-card").forEach(function (card) { card.classList.remove("active"); });
-      const activeCard = this.container.querySelector('.metric-card[data-verdict="' + verdict + '"]');
+      const activeCard = this.container.querySelector('.metric-card[data-verdict="' + verdict + '"');
       if (activeCard) activeCard.classList.add("active");
 
       this._applyFilters();

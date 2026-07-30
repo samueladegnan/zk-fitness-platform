@@ -39,6 +39,14 @@
       <p class="security-report-meta security-report-timestamp">Last generated: <span id="report-timestamp">Pending first run</span></p>
     </div>
 
+    <div id="example-report-banner" class="example-report-banner" role="status" aria-live="polite" style="display: none;">
+      <span class="example-report-banner__icon" aria-hidden="true">📋</span>
+      <div>
+        <strong>Example report</strong>
+        <p>The real guardrail scan found no issues, so these findings are illustrative placeholders so the dashboard is never empty. They are not real issues.</p>
+      </div>
+    </div>
+
     <h2>What This Report Shows</h2>
     <p>Every push to main is scanned with ESLint, the findings are exported as a SARIF report, and the AI CICD Security Guardrail triages them. This page is the raw output of the most recent run, committed automatically by the guardrail workflow so the portfolio always reflects the current state of the codebase.</p>
 
@@ -51,17 +59,9 @@
     <div id="security-dashboard" style="display: none;"></div>
 
     <h2>Backend Report</h2>
-    <div id="backend-example-notice" class="example-notice" style="display: none;">
-      <p class="example-notice__title"><span class="example-notice__icon" aria-hidden="true">ℹ️</span>Example findings</p>
-      <p class="example-notice__body">This dashboard shows example findings because the real backend guardrail scan has not yet produced a report.</p>
-    </div>
     <div id="backend-report" class="security-report-page"></div>
 
     <h2>Frontend Report</h2>
-    <div id="frontend-example-notice" class="example-notice" style="display: none;">
-      <p class="example-notice__title"><span class="example-notice__icon" aria-hidden="true">ℹ️</span>Example findings</p>
-      <p class="example-notice__body">This dashboard shows example findings because the real frontend guardrail scan has not yet produced a report.</p>
-    </div>
     <div id="frontend-report" class="security-report-page"></div>
   </main>
 
@@ -136,7 +136,7 @@
     ],
     "isExample": true
   },
-  "timestamp": "July 29, 2026 at 23:04 UTC"
+  "timestamp": "July 30, 2026 at 03:58 UTC"
 };
   </script>
   <script src="./assets/js/security-report.js"></script>

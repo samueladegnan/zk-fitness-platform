@@ -23,6 +23,13 @@
     const reports = window.GUARDRAIL_REPORTS || {};
     const backend = reports.backend;
     const frontend = reports.frontend;
+
+    const isExample = !!(backend && backend.isExample) || !!(frontend && frontend.isExample);
+    const bannerEl = document.getElementById("example-report-banner");
+    if (bannerEl) {
+      bannerEl.style.display = isExample ? "" : "none";
+    }
+
     const emptyEl = document.getElementById("security-empty");
     const dashboardEl = document.getElementById("security-dashboard");
 
@@ -38,17 +45,12 @@
     if (timestampEl && reports.timestamp) {
       timestampEl.textContent = reports.timestamp;
     } else if (timestampEl) {
-      timestampEl.textContent = "Example data — pending first CI run";
+      timestampEl.textContent = "Pending first CI run";
     }
 
     function renderReport(name, report) {
       const container = document.getElementById(name + "-report");
-      const notice = document.getElementById(name + "-example-notice");
       if (!container) return;
-
-      if (notice) {
-        notice.style.display = report && report.isExample ? "block" : "none";
-      }
 
       if (hasFindings(report)) {
         const renderer = new GuardrailReportRenderer(container, {
