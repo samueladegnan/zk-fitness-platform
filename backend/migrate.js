@@ -27,11 +27,6 @@ CREATE TABLE IF NOT EXISTS users (
   username VARCHAR(32) UNIQUE NOT NULL,
   dsa_public_key TEXT NOT NULL,
   kem_public_key TEXT NOT NULL,
-  subscription_status VARCHAR(32) DEFAULT 'inactive' NOT NULL,
-  subscription_type VARCHAR(32) DEFAULT NULL,
-  stripe_customer_id VARCHAR(255) DEFAULT NULL,
-  stripe_subscription_id VARCHAR(255) DEFAULT NULL,
-  subscription_period_end TIMESTAMPTZ DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -56,12 +51,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS dsa_public_key TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS kem_public_key TEXT;
 ALTER TABLE sync_data ADD COLUMN IF NOT EXISTS kem_ciphertext TEXT;
 
--- Add billing/subscription columns to existing users tables.
-ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(32) DEFAULT 'inactive' NOT NULL;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_type VARCHAR(32) DEFAULT NULL;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255) DEFAULT NULL;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(255) DEFAULT NULL;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_period_end TIMESTAMPTZ DEFAULT NULL;
+-- Drop legacy columns that are no longer used.
+ALTER TABLE users DROP COLUMN IF EXISTS subscription_status;
+ALTER TABLE users DROP COLUMN IF EXISTS subscription_type;
+ALTER TABLE users DROP COLUMN IF EXISTS stripe_customer_id;
+ALTER TABLE users DROP COLUMN IF EXISTS stripe_subscription_id;
+ALTER TABLE users DROP COLUMN IF EXISTS subscription_period_end;
 
 -- One-time migration from the old Argon2id auth_hash/salt schema.
 ALTER TABLE users DROP COLUMN IF EXISTS auth_hash;

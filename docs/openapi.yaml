@@ -170,96 +170,6 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
-  /billing/status:
-    get:
-      summary: Get the current user's subscription status
-      tags: [Billing]
-      security:
-        - sessionCookie: []
-      responses:
-        '200':
-          description: Subscription status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Subscription'
-
-  /billing/checkout:
-    post:
-      summary: Create a Stripe checkout session for cloud sync
-      tags: [Billing]
-      security:
-        - sessionCookie: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CheckoutRequest'
-      responses:
-        '200':
-          description: Checkout session created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CheckoutSession'
-
-  /billing/portal:
-    post:
-      summary: Create a Stripe customer portal session
-      tags: [Billing]
-      security:
-        - sessionCookie: []
-      responses:
-        '200':
-          description: Portal session created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  url:
-                    type: string
-                    format: uri
-
-  /billing/refund:
-    post:
-      summary: Request a refund
-      tags: [Billing]
-      security:
-        - sessionCookie: []
-      responses:
-        '200':
-          description: Refund processed
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-
-  /billing/webhook:
-    post:
-      summary: Receive Stripe webhooks
-      tags: [Billing]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: Webhook received
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  received:
-                    type: boolean
-
 components:
   securitySchemes:
     sessionCookie:
@@ -337,8 +247,6 @@ components:
       properties:
         username:
           type: string
-        subscription:
-          $ref: '#/components/schemas/Subscription'
 
     SyncPayload:
       type: object
@@ -353,35 +261,6 @@ components:
         kemCiphertext:
           type: string
           description: Base64 ML-KEM-768 ciphertext wrapping the AES key
-
-    Subscription:
-      type: object
-      properties:
-        status:
-          type: string
-          enum: [inactive, active]
-        type:
-          type: string
-          enum: [lifetime, subscription]
-        isPaid:
-          type: boolean
-
-    CheckoutRequest:
-      type: object
-      required: [type]
-      properties:
-        type:
-          type: string
-          enum: [lifetime, yearly]
-
-    CheckoutSession:
-      type: object
-      properties:
-        sessionId:
-          type: string
-        url:
-          type: string
-          format: uri
 
   responses:
     BadRequest:
@@ -405,7 +284,7 @@ components:
                 type: string
 
     Forbidden:
-      description: Subscription required for this action
+      description: Access denied for this action
       content:
         application/json:
           schema:

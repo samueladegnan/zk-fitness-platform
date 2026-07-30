@@ -204,10 +204,6 @@ The app provides a complete, user-friendly workout tracking experience:
 - **Exercise Database**: browse built-in exercises or add custom ones with category and equipment metadata.
 - **Records & Analytics**: view personal records, progress charts, and one-rep-max estimates computed locally on your device.
 
-## Monetization
-
-This project is currently a free demo. Cloud sync, local mode, and all workout features are available without payment. Billing and Stripe integration code remain in the repository but are dormant by default.
-
 ## Release Platforms
 
 ZK Fitness is built as a web-first PWA, so it can be shipped to every major platform with minimal additional configuration.

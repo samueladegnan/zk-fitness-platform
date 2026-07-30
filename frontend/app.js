@@ -183,11 +183,6 @@ async function api(path, options = {}) {
     body = {};
   }
   if (!res.ok) {
-    if (body.code === 'SUBSCRIPTION_REQUIRED') {
-      const err = new Error(body.error);
-      err.code = 'SUBSCRIPTION_REQUIRED';
-      throw err;
-    }
     throw new Error(body.error || `Server error (${res.status})`);
   }
   markApiSuccess();
@@ -2755,24 +2750,28 @@ async function loadSync() {
     console.error('Failed to load local sync data:', localErr);
   }
 
-  // Then attempt to refresh from the cloud.
-  try {
-    const res = await api('/sync');
-    if (res.exists && res.encryptedBlob) {
-      const encrypted = JSON.parse(res.encryptedBlob);
-      if (res.kemCiphertext) encrypted.kemCiphertext = res.kemCiphertext;
-      if (!isLocalMode && !encrypted.kemCiphertext && !session.kemKeyPair) {
-        throw new Error('No KEM keypair available to decrypt sync data.');
+  // Then attempt to refresh from the cloud when a backend is configured.
+  if (isBackendLikelyConfigured()) {
+    try {
+      const res = await api('/sync');
+      if (res.exists && res.encryptedBlob) {
+        const encrypted = JSON.parse(res.encryptedBlob);
+        if (res.kemCiphertext) encrypted.kemCiphertext = res.kemCiphertext;
+        if (!isLocalMode && !encrypted.kemCiphertext && !session.kemKeyPair) {
+          throw new Error('No KEM keypair available to decrypt sync data.');
+        }
+        const key = isLocalMode ? session.encKey : session.kemKeyPair.secretKey;
+        cloudData = await decryptData(encrypted, key);
+        // Keep the local copy in sync without re-encrypting.
+        await saveLocalData(session.username || 'demo', res.encryptedBlob, res.kemCiphertext || '');
       }
-      const key = isLocalMode ? session.encKey : session.kemKeyPair.secretKey;
-      cloudData = await decryptData(encrypted, key);
-      // Keep the local copy in sync without re-encrypting.
-      await saveLocalData(session.username || 'demo', res.encryptedBlob, res.kemCiphertext || '');
+    } catch (err) {
+      reportApiError(err, (failure) => {
+        if (status) status.textContent = localData ? 'Cloud sync unavailable. Working from local copy.' : 'Cloud sync unavailable.';
+      });
     }
-  } catch (err) {
-    reportApiError(err, (failure) => {
-      if (status) status.textContent = localData ? 'Cloud sync unavailable. Working from local copy.' : 'Cloud sync unavailable.';
-    });
+  } else if (status) {
+    status.textContent = localData ? 'Cloud sync unavailable. Working from local copy.' : 'Cloud sync unavailable.';
   }
 
   // Choose the most recently updated copy. Fallback order: local > cloud > fresh.
@@ -2831,16 +2830,20 @@ async function performSync() {
     return;
   }
 
+  // Skip cloud sync in local-only mode or when no backend is configured.
+  if (isLocalMode || !isBackendLikelyConfigured()) {
+    if (status && !isLocalMode) status.textContent = 'Saved locally. Cloud sync will resume once the backend is updated.';
+    return;
+  }
+
   // Attempt cloud sync when the network is available.
   if (!navigator.onLine) {
-    if (status) status.textContent = isLocalMode ? 'Local data saved.' : 'Offline. Encrypted state saved locally; will sync when online.';
+    if (status) status.textContent = 'Offline. Encrypted state saved locally; will sync when online.';
     return;
   }
 
   try {
-    const encrypted = isLocalMode
-      ? await encryptData(session.data, session.encKey)
-      : await encryptData(session.data, session.kemKeyPair.publicKey);
+    const encrypted = await encryptData(session.data, session.kemKeyPair.publicKey);
     await api('/sync', {
       method: 'PUT',
       body: JSON.stringify({
@@ -2848,13 +2851,9 @@ async function performSync() {
         kemCiphertext: encrypted.kemCiphertext || 'demo-kem-ciphertext-placeholder',
       }),
     });
-    if (status) status.textContent = isLocalMode ? 'Local data saved.' : 'Encrypted state synced successfully.';
+    if (status) status.textContent = 'Encrypted state synced successfully.';
   } catch (err) {
     reportApiError(err, (failure) => {
-      if (failure.code === 'SUBSCRIPTION_REQUIRED') {
-        if (status) status.textContent = 'Saved locally. Cloud sync will resume once the backend is updated.';
-        return;
-      }
       if (status) status.textContent = `Sync failed: ${failure.message}. Saved locally for now.`;
       showToast(`Sync failed: ${failure.message}`, 'error');
     });

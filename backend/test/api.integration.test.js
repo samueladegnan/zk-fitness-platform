@@ -46,7 +46,6 @@ describe('Health & meta endpoints', () => {
       .set('Cookie', cookie)
       .expect(200);
     assert.equal(res.body.username, TEST_USER);
-    assert.ok(res.body.subscription);
   });
 
   it('rejects an unauthenticated session request', async () => {
