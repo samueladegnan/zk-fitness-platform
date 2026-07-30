@@ -1003,34 +1003,50 @@ function renderDashboard() {
   const unlockedBadges = badges.filter((b) => b.unlocked);
   const lockedBadges = badges.filter((b) => !b.unlocked);
 
-  // Pick the locked badge closest to completion as the "next up" teaser.
+  // Pick the locked badge closest to completion as the "next up" focus.
   const nextBadge = lockedBadges.length > 0
-    ? [...lockedBadges].sort((a, b) => (b.progress / b.target) - (a.progress / a.target))[0]
+    ? [...lockedBadges].sort((a, b) => b.progressPercent - a.progressPercent)[0]
     : null;
 
   let badgeHtml = '';
 
+  if (nextBadge) {
+    const remaining = nextBadge.target - nextBadge.progress;
+    badgeHtml += `
+      <div class="next-badge-banner">
+        <h3 class="next-badge-heading">Up Next</h3>
+        <article class="badge-card next-up-detailed" data-tier="${nextBadge.tier}">
+          <div class="next-badge-header">
+            <span class="badge-card-icon locked-icon" aria-hidden="true">${nextBadge.icon}</span>
+            <div class="next-badge-info">
+              <h4 class="badge-card-title">${escapeHtml(nextBadge.name)}</h4>
+              <p class="badge-card-desc">${escapeHtml(nextBadge.description)}</p>
+            </div>
+          </div>
+          <div class="badge-progress-wrapper" aria-label="Progress: ${nextBadge.progressPercent}%. ${remaining.toLocaleString()} more to go.">
+            <div class="badge-progress-track" role="progressbar" aria-valuenow="${nextBadge.progressPercent}" aria-valuemin="0" aria-valuemax="100">
+              <div class="badge-progress-fill" style="width: ${nextBadge.progressPercent}%;"></div>
+            </div>
+            <div class="badge-progress-labels">
+              <span class="progress-current">${nextBadge.progress.toLocaleString()} / ${nextBadge.target.toLocaleString()}</span>
+              <span class="progress-remaining">${remaining.toLocaleString()} more to go</span>
+            </div>
+          </div>
+        </article>
+      </div>
+    `;
+  }
+
   if (unlockedBadges.length === 0) {
     badgeHtml += '<div class="badge-empty"><span class="badge-empty-icon" aria-hidden="true">🏅</span><p class="muted">Finish a workout and your first badge will land here.</p></div>';
   } else {
-    badgeHtml += unlockedBadges.map((b) => {
+    badgeHtml += `<div class="earned-badges-grid">${unlockedBadges.map((b) => {
       return `<article class="badge-card earned" data-tier="${b.tier}">
         <span class="badge-card-icon" aria-hidden="true">${b.icon}</span>
         <h4 class="badge-card-title">${escapeHtml(b.name)}</h4>
         <p class="badge-card-desc">${escapeHtml(b.description)}</p>
       </article>`;
-    }).join('');
-  }
-
-  if (nextBadge) {
-    badgeHtml += `<article class="badge-card next-up">
-      <span class="badge-card-icon" aria-hidden="true">⏳</span>
-      <h4 class="badge-card-title">Next: ${escapeHtml(nextBadge.name)}</h4>
-      <div class="badge-progress-track" role="progressbar" aria-valuenow="${nextBadge.progressPercent}" aria-valuemin="0" aria-valuemax="100">
-        <div class="badge-progress-fill" style="width: ${nextBadge.progressPercent}%;"></div>
-      </div>
-      <p class="badge-card-desc">${nextBadge.progress.toLocaleString()} / ${nextBadge.target.toLocaleString()}${nextBadge.target === 1 ? '' : ` (${nextBadge.progressPercent}%)`}</p>
-    </article>`;
+    }).join('')}</div>`;
   }
 
   badgeContainer.innerHTML = badgeHtml;

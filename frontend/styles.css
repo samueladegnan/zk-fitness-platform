@@ -453,17 +453,6 @@ button.small { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
 .badge-card[data-tier="gold"]:hover { box-shadow: 0 8px 20px rgba(245, 158, 11, 0.18); }
 .badge-card[data-tier="diamond"]:hover { box-shadow: 0 8px 20px rgba(34, 211, 238, 0.18); }
 
-/* Next-up teaser */
-.badge-card.next-up {
-  border-style: dashed;
-  opacity: 0.85;
-  --tier-glow: var(--muted);
-}
-
-.badge-card.next-up .badge-card-icon {
-  filter: grayscale(0.5);
-}
-
 .badge-progress-track {
   width: 100%;
   height: 6px;
@@ -479,6 +468,94 @@ button.small { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
   background: linear-gradient(90deg, var(--accent), var(--accent-light));
   border-radius: 999px;
   transition: width 0.5s ease;
+}
+
+/* Next badge banner */
+.next-badge-banner,
+.earned-badges-grid {
+  grid-column: 1 / -1;
+}
+
+.next-badge-banner {
+  margin-bottom: 1.5rem;
+}
+
+.next-badge-heading {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0 0 0.75rem 0;
+}
+
+.next-up-detailed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: stretch;
+  text-align: left;
+  padding: 1rem;
+  border-style: solid;
+  border-left-width: 4px;
+  border-color: var(--border);
+  border-left-color: var(--accent);
+  background: var(--card);
+}
+
+.next-up-detailed .badge-card-icon.locked-icon {
+  font-size: 2.5rem;
+  opacity: 0.4;
+  filter: grayscale(100%);
+  margin-bottom: 0;
+}
+
+.next-badge-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.next-badge-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.next-badge-info .badge-card-title {
+  margin: 0 0 0.2rem 0;
+  font-size: 1rem;
+}
+
+.next-badge-info .badge-card-desc {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.badge-progress-wrapper {
+  width: 100%;
+}
+
+.badge-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  margin-top: 0.4rem;
+  color: var(--muted);
+}
+
+.progress-remaining {
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* Earned badges grid */
+.earned-badges-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 0.75rem;
 }
 
 /* Empty badge state */
