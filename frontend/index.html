@@ -2,11 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>ZK Fitness - Zero-Knowledge Workout Tracker</title>
-  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <meta name="description" content="A privacy-first strength and cardio tracker with local encryption, offline support, and optional encrypted sync." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="ZK Fitness" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="icon" type="image/svg+xml" href="app-icon.svg" />
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#0f172a" />
+  <meta name="theme-color" content="#1e3a8a" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="stylesheet" href="styles.css" />
   <script src="config.js"></script>
@@ -14,13 +18,85 @@
   <script defer src="vendor/argon2.min.js"></script>
   <script defer src="vendor/noble-pqc.js"></script>
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch((err) => {
-          console.error('Service worker registration failed:', err);
+    let deferredInstallPrompt = null;
+    const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      const installButton = document.getElementById('install-app-btn');
+      if (installButton && !isStandalone) installButton.classList.remove('hidden');
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      document.getElementById('install-app-btn')?.classList.add('hidden');
+    });
+
+    window.addEventListener('load', () => {
+      if ('serviceWorker' in navigator) {
+        const hadController = Boolean(navigator.serviceWorker.controller);
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (hadController && !window.__zkSwRefreshing) {
+            window.__zkSwRefreshing = true;
+            window.location.reload();
+          }
         });
+        navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+          .then((registration) => registration.update())
+          .catch((err) => console.error('Service worker registration failed:', err));
+      }
+
+      const installButton = document.getElementById('install-app-btn');
+      const installModal = document.getElementById('install-help-modal');
+      const closeInstallModal = document.getElementById('install-help-close');
+      let installModalPreviousFocus = null;
+      const closeInstallHelp = () => {
+        installModal?.classList.add('hidden');
+        installModalPreviousFocus?.focus();
+        installModalPreviousFocus = null;
+      };
+      if (installButton && !isStandalone && (isIos || deferredInstallPrompt)) {
+        installButton.classList.remove('hidden');
+      }
+      installButton?.addEventListener('click', async () => {
+        if (deferredInstallPrompt) {
+          deferredInstallPrompt.prompt();
+          await deferredInstallPrompt.userChoice;
+          deferredInstallPrompt = null;
+          installButton.classList.add('hidden');
+          return;
+        }
+        installModalPreviousFocus = document.activeElement;
+        installModal?.classList.remove('hidden');
+        closeInstallModal?.focus();
       });
-    }
+      closeInstallModal?.addEventListener('click', closeInstallHelp);
+      installModal?.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeInstallHelp();
+          return;
+        }
+        if (event.key !== 'Tab') return;
+        const focusable = [...installModal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')];
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      });
+      installModal?.addEventListener('click', (event) => {
+        if (event.target === installModal) closeInstallHelp();
+      });
+    });
   </script>
 </head>
 <body>
@@ -37,8 +113,11 @@
         <button id="resume-workout-btn" class="small">Resume</button>
       </div>
       <nav class="app-nav" id="nav" aria-label="Main navigation"></nav>
-      <a href="../" class="back-to-portfolio">← Portfolio</a>
-      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark mode">🌙</button>
+      <div class="app-header-actions">
+        <a href="../" class="back-to-portfolio" aria-label="Back to portfolio">← <span>Portfolio</span></a>
+        <button id="install-app-btn" class="install-app-btn hidden" type="button">Install app</button>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark mode">🌙</button>
+      </div>
     </header>
 
     <main id="main">
@@ -181,6 +260,18 @@
     </main>
 
     <canvas id="confetti-canvas" aria-hidden="true"></canvas>
+
+    <!-- Install guidance for browsers without a programmatic install prompt -->
+    <div id="install-help-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="install-help-title">
+      <div class="modal-content install-help-content">
+        <h2 id="install-help-title">Install ZK Fitness</h2>
+        <p>On iPhone or iPad, open this site in Safari, tap <strong>Share</strong>, choose <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.</p>
+        <p class="muted">iOS does not expose a native web install prompt. Once added, ZK Fitness opens in its own app-style window and keeps its local data available offline.</p>
+        <div class="modal-actions">
+          <button id="install-help-close" type="button">Done</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Local Mode Security Modal -->
     <div id="local-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="local-modal-title">

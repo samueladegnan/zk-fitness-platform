@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-labelledby="title desc">
+  <title id="title">ZK Fitness app</title>
+  <desc id="desc">A royal-blue shield with a white strength-training barbell.</desc>
+  <defs>
+    <linearGradient id="shield" x1="14" y1="8" x2="86" y2="92" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563eb" />
+      <stop offset="1" stop-color="#1e3a8a" />
+    </linearGradient>
+  </defs>
+  <path d="M50 12 17 28v26c0 21 16.5 30.5 33 34 16.5-3.5 33-13 33-34V28L50 12Z" fill="url(#shield)" stroke="#93c5fd" stroke-width="3" stroke-linejoin="round" />
+  <path d="M22 40h8v20h-8zM32 30h12v40H32zM44 46h12v8H44zM56 30h12v40H56zM70 40h8v20h-8z" fill="#eff6ff" />
+  <path d="M22 50h56" fill="none" stroke="#bfdbfe" stroke-width="2" stroke-linecap="round" opacity=".9" />
+</svg>

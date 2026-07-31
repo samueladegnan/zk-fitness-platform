@@ -14,7 +14,7 @@
   <nav class="site-nav" aria-label="Primary">
     <a class="site-nav-brand" href="./">ZK Fitness</a>
     <ul class="site-nav-links">
-      <li><a href="https://samueladegnan.github.io/" target="_blank" rel="noopener noreferrer">&larr; Back to Portfolio</a></li>
+      <li><a href="https://samueladegnan.github.io/">&larr; Back to Portfolio</a></li>
       <li><a href="./">Overview</a></li>
       <li><a href="./demo.html">Live Demo</a></li>
       <li><a href="./architecture.html">Architecture</a></li>
@@ -28,41 +28,76 @@
 
   <header class="page-header">
     <h1 class="project-name">ZK Fitness</h1>
-    <p class="project-tagline">Latest AI CICD Security Guardrail triage output for ZK Fitness.</p>
+    <p class="project-tagline">A workout tracker designed so your training history stays yours.</p>
     <a class="btn" href="./frontend/">Launch Live Demo</a>
   </header>
 
-  <main id="main-content" class="main-content">
-    <div class="security-report-header">
-      <p class="security-report-meta">Generated automatically by the <a href="https://github.com/samueladegnan/ai-cicd-security-guardrail">ai-cicd-security-guardrail</a> GitHub Actions workflow.</p>
-      <p class="security-report-meta">Generated with <strong>ai-cicd-security-guardrail</strong>, another project by <a href="https://samueladegnan.github.io/">Samuel Degnan</a>.</p>
-      <p class="security-report-meta security-report-timestamp">Latest scan results</p>
-    </div>
-
-    <div id="example-report-banner" class="example-report-banner" role="status" aria-live="polite" style="display: none;">
-      <span class="example-report-banner__icon" aria-hidden="true">📋</span>
-      <div>
-        <strong>Example report</strong>
-        <p>The real guardrail scan found no issues, so these findings are illustrative placeholders so the dashboard is never empty. They are not real issues.</p>
+  <main id="main-content" class="main-content security-report-content">
+    <div class="security-report-page">
+      <div class="security-report-header">
+        <div class="report-status-label"><span class="status-dot" aria-hidden="true"></span> Live <code>backend/</code> and <code>frontend/</code> self-assessment</div>
+        <h1>Security Report</h1>
+        <p class="security-report-lead">
+          This page shows the latest report produced by running ESLint and AI CICD Security Guardrail v1.1.0 against the ZK Fitness repository's <code>backend/</code> and <code>frontend/</code> trees. Results are published as part of the documentation build and should be treated as an automated review aid, not a substitute for engineering judgment.
+        </p>
+        <dl class="security-report-details">
+          <div>
+            <dt>Source scan</dt>
+            <dd>ESLint SARIF generated from <code>backend/</code> and <code>frontend/</code> · <a href="https://github.com/samueladegnan/ai-cicd-security-guardrail/releases/tag/v1.1.0">AI Guardrail v1.1.0</a></dd>
+          </div>
+          <div>
+            <dt>Triage provider</dt>
+            <dd>Deterministic mock provider; source stays in CI</dd>
+          </div>
+          <div>
+            <dt>Report scope</dt>
+            <dd>ZK Fitness <code>backend/</code> and <code>frontend/</code> trees</dd>
+          </div>
+        </dl>
+        <p class="security-report-meta security-report-timestamp">
+          Published with the Pages build.
+        </p>
       </div>
+
+      <div class="report-disclaimer" role="note">
+        <strong>How to read this report:</strong> these are automated triage results, not a guarantee that the repository is vulnerability-free.
+        Findings should be verified by an engineer before being accepted or dismissed.
+      </div>
+
+      <div id="security-live-success" class="live-scan-success" role="status" style="display: none;">
+        <div class="live-scan-success__label">Live scan complete</div>
+        <h2>The real Guardrail scan found no issues</h2>
+        <p>
+          The latest GitHub Actions self-assessment scanned the ZK Fitness repository's <code>backend/</code> and <code>frontend/</code> trees and returned zero findings. To keep this page useful, the dashboard below uses clearly labeled example data. Those example findings are not issues in this repository.
+        </p>
+      </div>
+
+      <div id="security-live-findings" class="live-scan-findings" role="status" style="display: none;">
+        <div class="live-scan-findings__label">Live findings</div>
+        <h2>Findings from the real Guardrail scan</h2>
+        <p>
+          The latest GitHub Actions self-assessment found findings in the ZK Fitness repository's <code>backend/</code> and <code>frontend/</code> trees. The dashboard below shows those real scan results for review.
+        </p>
+      </div>
+
+      <div id="security-example-notice" class="example-report-notice" role="status" style="display: none;">
+        <div id="security-example-label" class="example-report-notice__label">Example report · live scan unavailable</div>
+        <h2 id="security-example-title">Illustrative findings are shown below</h2>
+        <p id="security-example-copy">
+          The live CI report is not available in this build, so this page is showing a committed synthetic report to demonstrate the dashboard. Every finding below is sample data and is <strong>not a real issue in this repository</strong>.
+        </p>
+      </div>
+
+      <div id="security-empty" class="empty-state" style="display: none;">
+        <span class="empty-icon" aria-hidden="true">⏳</span>
+        <h2 id="security-empty-title">Live report pending</h2>
+        <p id="security-empty-copy">
+          The latest CI report could not be loaded. The next Pages build will publish it. In the meantime, explore the <a href="./demo.html">illustrative browser demo</a> with clearly labeled sample reports.
+        </p>
+      </div>
+
+      <div id="security-dashboard" style="display: none;"></div>
     </div>
-
-    <h2>What This Report Shows</h2>
-    <p>Every push to main is scanned with ESLint, the findings are exported as a SARIF report, and the AI CICD Security Guardrail triages them. This page is the raw output of the most recent run, committed automatically by the guardrail workflow so the portfolio always reflects the current state of the codebase.</p>
-
-    <div id="security-empty" class="empty-state" style="display: block;">
-      <span class="empty-icon" aria-hidden="true">⏳</span>
-      <h3>Latest report not yet available</h3>
-      <p>The latest guardrail report will appear here once the CI pipeline produces it. You can explore the <a href="./demo.html">live demo</a> or the example dashboards below.</p>
-    </div>
-
-    <div id="security-dashboard" style="display: none;"></div>
-
-    <h2>Backend Report</h2>
-    <div id="backend-report" class="security-report-page"></div>
-
-    <h2>Frontend Report</h2>
-    <div id="frontend-report" class="security-report-page"></div>
   </main>
 
   <footer class="site-footer">
@@ -75,68 +110,58 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="./assets/js/guardrail-report-renderer.js"></script>
   <script>
-    window.GUARDRAIL_REPORTS = {
-  "backend": {
-    "summary": {
-      "total": 1,
-      "high_priority": 0,
-      "false_positive": 0,
-      "unclear": 1
-    },
-    "results": [
-      {
-        "finding": {
-          "rule_id": "generic-error-handler",
-          "message": "Generic error handler may leak stack traces in production.",
-          "file_path": "backend/server.js",
-          "line": 0,
-          "column": 0,
-          "severity": "LOW",
-          "code_snippet": "// Example finding shown when the real scan returns no findings.",
-          "cwe": "CWE-209",
-          "tool": "eslint",
-          "language": "javascript"
-        },
-        "verdict": "UNCLEAR",
-        "confidence": 0.6,
-        "reasoning": "Example finding for demonstration purposes. The real guardrail scan has not yet produced a report.",
-        "compliance_hits": [],
-        "remediation": "Log the full error server-side and return a generic message to the client in production builds."
-      }
-    ],
-    "isExample": true
+    window.GUARDRAIL_SECURITY_REPORT = /* GENERATED_LIVE_REPORT_START */ null /* GENERATED_LIVE_REPORT_END */;
+    window.GUARDRAIL_EXAMPLE_REPORT = /* GENERATED_EXAMPLE_REPORT_START */ {
+  "summary": {
+    "total": 2,
+    "high_priority": 0,
+    "false_positive": 0,
+    "unclear": 2
   },
-  "frontend": {
-    "summary": {
-      "total": 1,
-      "high_priority": 0,
-      "false_positive": 0,
-      "unclear": 1
+  "results": [
+    {
+      "finding": {
+        "rule_id": "generic-error-handler",
+        "message": "Generic error handler may leak stack traces in production.",
+        "file_path": "backend/server.js",
+        "line": 0,
+        "column": 0,
+        "severity": "LOW",
+        "code_snippet": "// Example finding shown when the real scan returns no findings.",
+        "cwe": "CWE-209",
+        "tool": "eslint",
+        "language": "javascript"
+      },
+      "verdict": "UNCLEAR",
+      "confidence": 0.6,
+      "reasoning": "Example finding for demonstration purposes. The real guardrail scan has not yet produced a report.",
+      "compliance_hits": [],
+      "remediation": "Log the full error server-side and return a generic message to the client in production builds."
     },
-    "results": [
-      {
-        "finding": {
-          "rule_id": "no-console",
-          "message": "console.log statement left in production code.",
-          "file_path": "frontend/app.js",
-          "line": 0,
-          "column": 0,
-          "severity": "LOW",
-          "code_snippet": "// Example finding shown when the real scan returns no findings.",
-          "cwe": null,
-          "tool": "eslint",
-          "language": "javascript"
-        },
-        "verdict": "UNCLEAR",
-        "confidence": 0.6,
-        "reasoning": "Example finding for demonstration purposes. The real guardrail scan has not yet produced a report.",
-        "compliance_hits": [],
-        "remediation": "Remove the statement or replace it with a structured logging utility that respects log levels."
-      }
-    ],
-    "isExample": true
-  }
-};
+    {
+      "finding": {
+        "rule_id": "no-console",
+        "message": "console.log statement left in production code.",
+        "file_path": "frontend/app.js",
+        "line": 0,
+        "column": 0,
+        "severity": "LOW",
+        "code_snippet": "// Example finding shown when the real scan returns no findings.",
+        "cwe": null,
+        "tool": "eslint",
+        "language": "javascript"
+      },
+      "verdict": "UNCLEAR",
+      "confidence": 0.6,
+      "reasoning": "Example finding for demonstration purposes. The real guardrail scan has not yet produced a report.",
+      "compliance_hits": [],
+      "remediation": "Remove the statement or replace it with a structured logging utility that respects log levels."
+    }
+  ],
+  "isExample": true,
+  "isPartial": false
+} /* GENERATED_EXAMPLE_REPORT_END */;
+
   </script>
   <script src="./assets/js/security-report.js"></script>
 </body>

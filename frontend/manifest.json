@@ -6,8 +6,8 @@
   "description": "Privacy-first strength training and cardio tracker with zero-knowledge encryption.",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "background_color": "#eff6ff",
+  "theme_color": "#1e3a8a",
   "orientation": "portrait-primary",
   "scope": "./",
   "icons": [

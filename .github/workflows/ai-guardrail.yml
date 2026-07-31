@@ -7,6 +7,7 @@ on:
     branches: [main]
 
 permissions:
+  actions: write
   contents: write
   security-events: write
 
@@ -56,6 +57,7 @@ jobs:
             --output-file ../frontend.sarif
 
       - name: AI Guardrail triage (backend)
+        id: guardrail-backend
         if: steps.eslint-backend.outcome == 'success'
         # Pinned to the v1.1.0 release of the reusable guardrail action for
         # the latest multi-language triage engine, compliance mapping, and
@@ -73,6 +75,7 @@ jobs:
         continue-on-error: true
 
       - name: AI Guardrail triage (frontend)
+        id: guardrail-frontend
         if: steps.eslint-frontend.outcome == 'success'
         # Pinned to the v1.1.0 release of the reusable guardrail action for
         # the latest multi-language triage engine, compliance mapping, and
@@ -119,6 +122,49 @@ jobs:
               sys.exit(1)
           print('Guardrail passed: no obvious secrets detected.')
           PY
+
+      - name: Validate Guardrail JSON reports
+        id: validate-reports
+        if: steps.guardrail-backend.outcome == 'success' && steps.guardrail-frontend.outcome == 'success' && hashFiles('backend-guardrail-report.json') != '' && hashFiles('frontend-guardrail-report.json') != ''
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          for filename in ('backend-guardrail-report.json', 'frontend-guardrail-report.json'):
+              data = json.loads(Path(filename).read_text(encoding='utf-8'))
+              if not isinstance(data, dict) or not isinstance(data.get('results'), list):
+                  raise SystemExit(f'{filename} is not a valid Guardrail report')
+              if 'summary' in data and not isinstance(data['summary'], dict):
+                  raise SystemExit(f'{filename} has an invalid summary')
+              print(f'Validated {filename}: {len(data["results"])} findings')
+          PY
+
+      - name: Build Security Report page
+        if: steps.validate-reports.outcome == 'success'
+        run: python3 scripts/build-guardrail-report.py
+
+      - name: Commit updated Security Report
+        id: commit-report
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.guardrail-backend.outcome == 'success' && steps.guardrail-frontend.outcome == 'success' && steps.validate-reports.outcome == 'success'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add guardrail.html
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Security Report is already up to date."
+          else
+            git commit -m "docs: update guardrail security report"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger Pages deployment for updated report
+        if: steps.commit-report.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main
 
       - name: Upload guardrail reports
         if: always() && (hashFiles('backend-guardrail-report.json') != '' || hashFiles('frontend-guardrail-report.json') != '')

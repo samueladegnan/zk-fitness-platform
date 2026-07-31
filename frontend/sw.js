@@ -1,23 +1,33 @@
-const CACHE_NAME = 'zk-fitness-v1';
+const CACHE_NAME = 'zk-fitness-v6';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
+  './manifest.json',
   './styles.css',
   './app.js',
   './config.js',
   './exercises.js',
+  './lib/crypto.js',
+  './lib/db.js',
   './lib/fitness.js',
+  './lib/workout.js',
   './vendor/argon2.min.js',
   './vendor/noble-pqc.js',
   './icon-192.png',
   './icon-512.png',
-  '../assets/favicon.svg'
+  './app-icon.svg'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE)).catch((err) => {
-      console.error('ZK Fitness service worker cache prep failed', err);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await Promise.all(ASSETS_TO_CACHE.map(async (asset) => {
+        try {
+          await cache.add(asset);
+        } catch (error) {
+          console.error(`ZK Fitness could not cache ${asset}`, error);
+        }
+      }));
     })
   );
   self.skipWaiting();
@@ -40,12 +50,18 @@ self.addEventListener('fetch', (event) => {
 
   // SECURITY: Never cache or intercept API requests. This is a zero-knowledge
   // app; encrypted blobs and auth material must not be stored by the service worker.
-  if (url.pathname.includes('/api/')) {
+  const isApiRequest = url.pathname === '/api' || url.pathname.startsWith('/api/');
+  if (isApiRequest || url.origin !== self.location.origin) {
     return;
   }
 
-  // Only cache GET requests for the app shell. Everything else goes straight to the network.
-  if (request.method !== 'GET') {
+  // Only cache navigations and static app-shell resources. Do not cache arbitrary
+  // same-origin GET requests because future routes may contain sensitive data.
+  const isFrontendNavigation = request.mode === 'navigate'
+    && (url.pathname === '/frontend/' || url.pathname === '/frontend/index.html');
+  const isStaticAssetRequest = ['script', 'style', 'image', 'font'].includes(request.destination);
+  const isAppShellRequest = isFrontendNavigation || isStaticAssetRequest;
+  if (request.method !== 'GET' || !isAppShellRequest) {
     return;
   }
 
@@ -59,6 +75,11 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(request))
+      .catch(async () => {
+        const cached = await caches.match(request);
+        if (cached) return cached;
+        if (request.mode === 'navigate') return caches.match('./index.html');
+        return Response.error();
+      })
   );
 });

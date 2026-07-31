@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build the guardrail security report page from JSON triage reports.
 
-The v1.1.0 guardrail template renders interactive dashboards with the
+The v1.1.0 guardrail template renders an interactive dashboard with the
 GuardrailReportRenderer. This script reads the JSON reports produced by the
-AI CICD Security Guardrail action and injects them into guardrail.html as the
-window.GUARDRAIL_REPORTS data structure.
+AI CICD Security Guardrail action and injects canonical live/example payloads
+into guardrail.html.
 """
 
 import json
@@ -64,16 +64,52 @@ EXAMPLE_FRONTEND = {
 
 
 def load_json_report(path: Path) -> dict | None:
-    """Load a guardrail JSON report if it exists and is valid."""
+    """Load a structurally valid guardrail report, including clean reports."""
     if not path.exists():
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return None
-        return data
     except (json.JSONDecodeError, OSError):
         return None
+
+    if not isinstance(data, dict):
+        return None
+    if not isinstance(data.get("results"), list):
+        return None
+    if "summary" in data and not isinstance(data["summary"], dict):
+        return None
+    return data
+
+
+def combine_reports(reports: list[dict], is_example: bool, is_partial: bool = False) -> dict | None:
+    """Combine scope reports for the canonical single-dashboard contract."""
+    if not reports:
+        return None
+
+    results = [result for report in reports for result in report.get("results", [])]
+    summaries = [report.get("summary", {}) for report in reports]
+    return {
+        "summary": {
+            "total": sum(summary.get("total", 0) for summary in summaries) or len(results),
+            "high_priority": sum(summary.get("high_priority", 0) for summary in summaries),
+            "false_positive": sum(summary.get("false_positive", 0) for summary in summaries),
+            "unclear": sum(summary.get("unclear", 0) for summary in summaries),
+        },
+        "results": results,
+        "isExample": is_example,
+        "isPartial": is_partial,
+    }
+
+
+def replace_generated_marker(content: str, variable: str, start: str, end: str, value: object) -> str:
+    """Replace the value between a stable generated-variable marker pair."""
+    value_json = json.dumps(value, indent=2)
+    pattern = rf"({re.escape(variable)}\s*=\s*/\*\s*{re.escape(start)}\s*\*/\s*)[\s\S]*?(\s*/\*\s*{re.escape(end)}\s*\*/\s*;)"
+    replacement = rf"\g<1>{value_json}\g<2>"
+    updated, replacements = re.subn(pattern, replacement, content, count=1)
+    if replacements == 0:
+        raise RuntimeError(f"Could not find generated marker for {variable}")
+    return updated
 
 
 def build() -> None:
@@ -81,35 +117,42 @@ def build() -> None:
     backend_report = load_json_report(root / "backend-guardrail-report.json")
     frontend_report = load_json_report(root / "frontend-guardrail-report.json")
 
-    if backend_report is None or not backend_report.get("results"):
+    if backend_report is None:
         backend_report = {**EXAMPLE_BACKEND, "isExample": True}
     else:
         backend_report["isExample"] = False
 
-    if frontend_report is None or not frontend_report.get("results"):
+    if frontend_report is None:
         frontend_report = {**EXAMPLE_FRONTEND, "isExample": True}
     else:
         frontend_report["isExample"] = False
 
-    reports = {
-        "backend": backend_report,
-        "frontend": frontend_report,
-    }
+    live_reports = [report for report in (backend_report, frontend_report) if report and not report.get("isExample")]
+    example_reports = [EXAMPLE_BACKEND, EXAMPLE_FRONTEND]
+    canonical_live_report = combine_reports(
+        live_reports,
+        is_example=False,
+        is_partial=len(live_reports) not in (0, 2),
+    )
+    canonical_example_report = combine_reports(example_reports, is_example=True)
 
     guardrail_html = root / "guardrail.html"
     content = guardrail_html.read_text(encoding="utf-8")
 
-    # Replace the embedded window.GUARDRAIL_REPORTS assignment with the live data.
-    reports_json = json.dumps(reports, indent=2)
-    new_content, replacements = re.subn(
-        r"window\.GUARDRAIL_REPORTS\s*=\s*\{[\s\S]*?\};",
-        "window.GUARDRAIL_REPORTS = " + reports_json + ";",
+    new_content = replace_generated_marker(
         content,
-        count=1,
+        "window.GUARDRAIL_SECURITY_REPORT",
+        "GENERATED_LIVE_REPORT_START",
+        "GENERATED_LIVE_REPORT_END",
+        canonical_live_report,
     )
-
-    if replacements == 0:
-        raise RuntimeError("Could not find window.GUARDRAIL_REPORTS marker in guardrail.html")
+    new_content = replace_generated_marker(
+        new_content,
+        "window.GUARDRAIL_EXAMPLE_REPORT",
+        "GENERATED_EXAMPLE_REPORT_START",
+        "GENERATED_EXAMPLE_REPORT_END",
+        canonical_example_report,
+    )
 
     if new_content == content:
         print(f"{guardrail_html} is already up to date")

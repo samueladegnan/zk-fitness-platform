@@ -40,7 +40,7 @@ jobs:
 
       - name: Run AI Guardrail action (compatibility check)
         if: hashFiles('health-check.sarif') != ''
-        uses: samueladegnan/ai-cicd-security-guardrail@v1.0.0
+        uses: samueladegnan/ai-cicd-security-guardrail@v1.1.0
         with:
           report-path: ./health-check.sarif
           format: sarif

@@ -6,6 +6,8 @@ A workout tracker that keeps your training history private. Your data is encrypt
 
 The app uses post-quantum cryptography: **ML-DSA-65** for login signatures and **ML-KEM-768** to wrap a fresh AES data key on every sync. The symmetric bulk encryption is AES-256-GCM, with keys derived from your password via Argon2id.
 
+> **Portfolio note:** This project was built and reviewed with AI assistance. Sam retained responsibility for the architecture, implementation decisions, tests, security model, and final code review.
+
 ---
 
 ## The Problem
@@ -31,7 +33,7 @@ This platform shifts trust to the client. The server stores only public keys and
 - **Offline-First Client Architecture**: buildless vanilla-JS SPA with IndexedDB persistence, service worker caching, and state that survives app restarts.
 - **Local Mode**: try the full app without an account; data stays on your device.
 - **Cross-Device Sync**: encrypted state syncs across authenticated devices.
-- **Progressive Web App**: installable on mobile and desktop with an offline service worker.
+- **Progressive Web App**: installable on supported browsers and desktop platforms with an offline service worker. Android browsers can offer a native install prompt; iOS installation is user-initiated from Safari's Share menu.
 
 ## Architecture
 
@@ -89,7 +91,7 @@ This project uses **vanilla JavaScript** with **JSDoc type annotations** and a `
 
 ## Portfolio Ecosystem
 
-- **AI CI/CD Security Guardrail**: `.github/workflows/ai-guardrail.yml` generates an ESLint SARIF report from the ZK Fitness codebase and triages it with `samueladegnan/ai-cicd-security-guardrail@v1.1.0`. The latest output is committed to `guardrail.html` and shown as the **Security Report**. When the scan finds real issues, those are displayed; when no issues are found, example placeholders are shown so the dashboard is never empty.
+- **AI CI/CD Security Guardrail**: `.github/workflows/ai-guardrail.yml` generates an ESLint SARIF report from the ZK Fitness codebase and triages it with `samueladegnan/ai-cicd-security-guardrail@v1.1.0`. The latest output is committed to the report source and published at the clean [`/security/`](https://samueladegnan.github.io/zk-fitness-platform/security/) **Security Report** route. When the scan finds real issues, those are displayed; when no issues are found, example placeholders are shown so the dashboard is never empty.
 
 ### Enabling Cross-Project Integrations
 
@@ -209,7 +211,9 @@ ZK Fitness is built as a web-first PWA, so it can be shipped to web and desktop 
 
 1. Push to `main`.
 2. GitHub Actions runs `.github/workflows/pages.yml` and deploys to `https://<username>.github.io/zk-fitness-platform/`.
-3. Users visit the site and tap **Add to Home Screen** to install the PWA.
+3. Android Chrome may show **Install app** once the manifest and service worker are ready. On iPhone or iPad, open the site in Safari and choose **Share → Add to Home Screen**; iOS does not expose a programmatic install prompt.
+
+The service worker caches the app shell, never intercepts `/api/` requests, and uses a versioned cache name. Deploying a new `sw.js` installs the new worker in the background; this project activates it immediately and reloads controlled clients once so users receive the updated shell. IndexedDB data is separate from the app-shell cache and is not cleared by a normal frontend release.
 
 ### Desktop (Tauri)
 
@@ -230,6 +234,10 @@ ZK Fitness is built as a web-first PWA, so it can be shipped to web and desktop 
    docker build -t zk-fitness-api ./backend
    ```
 2. Push to a registry of your choice, or run locally with the provided `docker-compose.yml`.
+
+## AI-Assisted Development
+
+AI tools were used as development accelerators for exploration, drafting, refactoring suggestions, and review prompts. They did not replace engineering judgment: the architecture, cryptographic boundary, implementation, tests, security decisions, and final acceptance remain Samuel's responsibility.
 
 ## Roadmap
 
