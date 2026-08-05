@@ -46,6 +46,13 @@
     <h2>How it works</h2>
     <p>Argon2id and HKDF derive client-side key material. AES-256-GCM encrypts workout state before sync. ML-DSA-65 authenticates login requests, while ML-KEM-768 encapsulates a fresh sync data key. Private keys and plaintext workouts stay on the device.</p>
 
+    <h2>Engineering focus</h2>
+    <ul>
+      <li><strong>Offline-first product behavior:</strong> local mode is fully usable without an account, with IndexedDB persistence and browser-side analytics.</li>
+      <li><strong>Small, explicit trust boundary:</strong> the API manages sessions and encrypted storage, while the client owns readable workout state and cryptographic keys.</li>
+      <li><strong>Production discipline:</strong> the repository includes migrations, health checks, structured logs, Docker support, end-to-end coverage, and automated security review.</li>
+    </ul>
+
     <p><strong>About the build:</strong> I built and reviewed this project with AI assistance. I remain responsible for the architecture, engineering decisions, testing, security model, and final code.</p>
 
     <h2>About the author</h2>

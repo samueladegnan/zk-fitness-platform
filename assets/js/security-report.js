@@ -137,7 +137,7 @@
     const exampleReport = window.GUARDRAIL_EXAMPLE_REPORT;
     const isMixed = Boolean(liveReport && liveReport.isPartial);
 
-    if (liveReport && liveReport.results.length > 0) {
+    if (liveReport && (liveReport.results.length > 0 || liveReport.isPartial)) {
       render(liveReport, false, null, isMixed);
       return;
     }

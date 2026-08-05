@@ -65,13 +65,13 @@ jobs:
         # compatibility before any future upgrade.
         uses: samueladegnan/ai-cicd-security-guardrail@v1.1.0
         with:
-          report-path: ./backend.sarif
+          report-path: /github/workspace/backend.sarif
           format: sarif
-          repo-root: .
+          repo-root: /github/workspace
           provider: ${{ secrets.AI_GUARD_PROVIDER || 'mock' }}
           llm-api-key: ${{ secrets.AI_GUARD_API_KEY || '' }}
-          output-json: ./backend-guardrail-report.json
-          output-markdown: ./backend-guardrail-report.md
+          output-json: /github/workspace/backend-guardrail-report.json
+          output-markdown: /github/workspace/backend-guardrail-report.md
         continue-on-error: true
 
       - name: AI Guardrail triage (frontend)
@@ -83,13 +83,13 @@ jobs:
         # compatibility before any future upgrade.
         uses: samueladegnan/ai-cicd-security-guardrail@v1.1.0
         with:
-          report-path: ./frontend.sarif
+          report-path: /github/workspace/frontend.sarif
           format: sarif
-          repo-root: .
+          repo-root: /github/workspace
           provider: ${{ secrets.AI_GUARD_PROVIDER || 'mock' }}
           llm-api-key: ${{ secrets.AI_GUARD_API_KEY || '' }}
-          output-json: ./frontend-guardrail-report.json
-          output-markdown: ./frontend-guardrail-report.md
+          output-json: /github/workspace/frontend-guardrail-report.json
+          output-markdown: /github/workspace/frontend-guardrail-report.md
         continue-on-error: true
 
       - name: Scan for hardcoded secrets
@@ -123,9 +123,18 @@ jobs:
           print('Guardrail passed: no obvious secrets detected.')
           PY
 
+      - name: Verify Guardrail reports were written
+        id: verify-reports
+        if: always() && steps.eslint-backend.outcome == 'success' && steps.eslint-frontend.outcome == 'success'
+        run: |
+          set -e
+          test -s backend-guardrail-report.json
+          test -s frontend-guardrail-report.json
+          echo "Guardrail reports were written to the workspace."
+
       - name: Validate Guardrail JSON reports
         id: validate-reports
-        if: steps.guardrail-backend.outcome == 'success' && steps.guardrail-frontend.outcome == 'success' && hashFiles('backend-guardrail-report.json') != '' && hashFiles('frontend-guardrail-report.json') != ''
+        if: steps.verify-reports.outcome == 'success'
         run: |
           python3 - <<'PY'
           import json
@@ -146,7 +155,7 @@ jobs:
 
       - name: Commit updated Security Report
         id: commit-report
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.guardrail-backend.outcome == 'success' && steps.guardrail-frontend.outcome == 'success' && steps.validate-reports.outcome == 'success'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.validate-reports.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -167,7 +176,7 @@ jobs:
         run: gh workflow run pages.yml --ref main
 
       - name: Upload guardrail reports
-        if: always() && (hashFiles('backend-guardrail-report.json') != '' || hashFiles('frontend-guardrail-report.json') != '')
+        if: always() && steps.verify-reports.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: guardrail-reports
