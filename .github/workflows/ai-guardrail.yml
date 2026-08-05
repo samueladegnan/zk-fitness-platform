@@ -26,6 +26,14 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned Guardrail CLI
+        run: python -m pip install --disable-pip-version-check "https://github.com/samueladegnan/ai-cicd-security-guardrail/archive/refs/tags/v1.1.0.tar.gz"
+
       - name: Install dependencies
         run: |
           cd backend && npm ci
@@ -59,37 +67,35 @@ jobs:
       - name: AI Guardrail triage (backend)
         id: guardrail-backend
         if: steps.eslint-backend.outcome == 'success'
-        # Pinned to the v1.1.0 release of the reusable guardrail action for
-        # the latest multi-language triage engine, compliance mapping, and
-        # interactive report format. The integration-health workflow verifies
-        # compatibility before any future upgrade.
-        uses: samueladegnan/ai-cicd-security-guardrail@v1.1.0
-        with:
-          report-path: /github/workspace/backend.sarif
-          format: sarif
-          repo-root: /github/workspace
-          provider: ${{ secrets.AI_GUARD_PROVIDER || 'mock' }}
-          llm-api-key: ${{ secrets.AI_GUARD_API_KEY || '' }}
-          output-json: /github/workspace/backend-guardrail-report.json
-          output-markdown: /github/workspace/backend-guardrail-report.md
+        # Run the pinned v1.1.0 CLI on the runner so report files are written
+        # directly to the workspace. The integration-health workflow continues
+        # to verify the reusable Docker action separately.
+        run: |
+          guardrail "$GITHUB_WORKSPACE/backend.sarif" \
+            --format sarif \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --provider "$GUARDRAIL_LLM_PROVIDER" \
+            --output-json "$GITHUB_WORKSPACE/backend-guardrail-report.json" \
+            --output-markdown "$GITHUB_WORKSPACE/backend-guardrail-report.md"
+        env:
+          GUARDRAIL_LLM_PROVIDER: ${{ secrets.AI_GUARD_PROVIDER || 'mock' }}
+          GUARDRAIL_LLM_API_KEY: ${{ secrets.AI_GUARD_API_KEY || '' }}
         continue-on-error: true
 
       - name: AI Guardrail triage (frontend)
         id: guardrail-frontend
         if: steps.eslint-frontend.outcome == 'success'
-        # Pinned to the v1.1.0 release of the reusable guardrail action for
-        # the latest multi-language triage engine, compliance mapping, and
-        # interactive report format. The integration-health workflow verifies
-        # compatibility before any future upgrade.
-        uses: samueladegnan/ai-cicd-security-guardrail@v1.1.0
-        with:
-          report-path: /github/workspace/frontend.sarif
-          format: sarif
-          repo-root: /github/workspace
-          provider: ${{ secrets.AI_GUARD_PROVIDER || 'mock' }}
-          llm-api-key: ${{ secrets.AI_GUARD_API_KEY || '' }}
-          output-json: /github/workspace/frontend-guardrail-report.json
-          output-markdown: /github/workspace/frontend-guardrail-report.md
+        # Use the same pinned CLI and provider for the frontend scope.
+        run: |
+          guardrail "$GITHUB_WORKSPACE/frontend.sarif" \
+            --format sarif \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --provider "$GUARDRAIL_LLM_PROVIDER" \
+            --output-json "$GITHUB_WORKSPACE/frontend-guardrail-report.json" \
+            --output-markdown "$GITHUB_WORKSPACE/frontend-guardrail-report.md"
+        env:
+          GUARDRAIL_LLM_PROVIDER: ${{ secrets.AI_GUARD_PROVIDER || 'mock' }}
+          GUARDRAIL_LLM_API_KEY: ${{ secrets.AI_GUARD_API_KEY || '' }}
         continue-on-error: true
 
       - name: Scan for hardcoded secrets
