@@ -4,15 +4,15 @@
  */
 
 :root {
-  --gr-bg-body: #f7fbf8;
-  --gr-text-main: #17352c;
-  --gr-text-muted: #60766c;
+  --gr-bg-body: var(--page-bg);
+  --gr-text-main: var(--text-main);
+  --gr-text-muted: var(--text-muted);
   --gr-card-bg: #ffffff;
-  --gr-card-border: #d8ebe0;
-  --gr-card-shadow: 0 8px 18px -10px rgba(16, 74, 54, 0.22), 0 3px 8px -4px rgba(16, 74, 54, 0.12);
+  --gr-card-border: var(--green-border);
+  --gr-card-shadow: 0 4px 12px -10px rgba(16, 74, 54, 0.18);
   --gr-input-bg: #ffffff;
   --gr-input-border: #bfd8ca;
-  --gr-accent: #15803d;
+  --gr-accent: var(--green);
   --gr-accent-light: #d1fae5;
   --gr-high: #dc2626;
   --gr-fp: #059669;
@@ -34,27 +34,29 @@
 }
 
 .security-report-content {
-  max-width: 72rem;
-  padding-right: 1.5rem;
-  padding-left: 1.5rem;
+  max-width: 64rem;
 }
 
 .security-report-page {
   margin-top: 0;
 }
 
-.security-report-header {
-  margin-bottom: 1.5rem;
-  padding: 1rem 1.25rem;
-  background: #f3faf6;
-  border: 1px solid var(--gr-card-border);
-  border-radius: 0.5rem;
+.security-report-page > h2 {
+  margin-top: 0;
 }
 
-.security-report-header h1 {
-  margin: 0 0 0.5rem;
-  color: var(--gr-text-main);
-  font-size: clamp(1.8rem, 4vw, 2.6rem);
+.security-report-intro {
+  max-width: 48rem;
+  color: var(--gr-text-muted);
+}
+
+.security-report-context {
+  margin: 1.5rem 0;
+  padding: 1.25rem;
+  border: 1px solid var(--gr-card-border);
+  border-left: 4px solid var(--gr-accent);
+  border-radius: 0.4rem;
+  background: #f3faf6;
 }
 
 .security-report-meta {
@@ -711,9 +713,8 @@
 }
 
 @media (max-width: 640px) {
-  .security-report-content {
-    padding-right: 1rem;
-    padding-left: 1rem;
+  .security-report-context {
+    padding: 1rem;
   }
 
   .security-report-details {

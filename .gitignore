@@ -27,6 +27,9 @@ pgdata/
 site/
 
 # Guardrail CI artifacts
+health-check.sarif
+guardrail-health-report.json
+guardrail-health-report.md
 backend-guardrail-report.md
 backend-guardrail-report.json
 frontend-guardrail-report.md

@@ -63,7 +63,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Session'
+                $ref: '#/components/schemas/RegisterResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '409':
@@ -83,11 +83,13 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: Authenticated
+          description: Login nonce or authenticated session
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Session'
+                oneOf:
+                  - $ref: '#/components/schemas/LoginChallengeResponse'
+                  - $ref: '#/components/schemas/Session'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -215,7 +217,7 @@ components:
 
     RegisterRequest:
       type: object
-      required: [username, dsaPublicKey, kemPublicKey, nonce, solution]
+      required: [username, dsaPublicKey, kemPublicKey, challenge, solution]
       properties:
         username:
           type: string
@@ -226,31 +228,67 @@ components:
         kemPublicKey:
           type: string
           description: Base64 ML-KEM-768 public key
-        nonce:
+        challenge:
           type: string
+          description: Server-issued proof-of-work challenge nonce
         solution:
           type: integer
           description: Proof-of-work solution
-        inviteCode:
-          type: string
-          description: Optional invite code when REGISTRATION_INVITE_CODE is configured
         website:
           type: string
           description: Honeypot field; if filled, the request is rejected
 
     LoginRequest:
+      oneOf:
+        - $ref: '#/components/schemas/LoginChallengeRequest'
+        - $ref: '#/components/schemas/LoginSignatureRequest'
+
+    LoginChallengeRequest:
       type: object
+      additionalProperties: false
+      required: [username]
+      properties:
+        username:
+          type: string
+          description: Username for the first login step
+
+    LoginSignatureRequest:
+      type: object
+      additionalProperties: false
       required: [username, signature]
       properties:
         username:
           type: string
+          description: Username for the second login step
         signature:
           type: string
           description: Base64 ML-DSA-65 signature of the server nonce
 
+    RegisterResponse:
+      type: object
+      required: [message, username]
+      properties:
+        message:
+          type: string
+          example: User created
+        username:
+          type: string
+
+    LoginChallengeResponse:
+      type: object
+      required: [nonce]
+      properties:
+        nonce:
+          type: string
+          description: Base64 server-issued login nonce
+
     Session:
       type: object
+      required: [message, username]
       properties:
+        message:
+          type: string
+          example: Authenticated
         username:
           type: string
 
@@ -260,7 +298,7 @@ components:
       properties:
         encryptedBlob:
           type: string
-          description: Base64 JSON object containing the AES-GCM IV and ciphertext
+          description: JSON string containing the AES-GCM IV and ciphertext fields
         kemCiphertext:
           type: string
           description: Base64 ML-KEM-768 ciphertext wrapping the AES key
@@ -274,7 +312,7 @@ components:
         encryptedBlob:
           type: string
           nullable: true
-          description: Base64 JSON object containing the AES-GCM IV and ciphertext (null when exists is false)
+          description: JSON string containing the AES-GCM IV and ciphertext fields (null when exists is false)
         kemCiphertext:
           type: string
           nullable: true

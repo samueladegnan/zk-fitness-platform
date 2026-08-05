@@ -11,7 +11,10 @@
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
   <nav class="site-nav" aria-label="Primary">
-    <a class="site-nav-brand" href="./">ZK Fitness</a>
+    <div class="site-nav-identity">
+      <a class="site-nav-brand" href="./" aria-label="ZK Fitness overview">ZK Fitness</a>
+      <span class="site-nav-tagline">A privacy-first workout tracker with a client-owned security boundary.</span>
+    </div>
     <ul class="site-nav-links">
       <li><a href="https://samueladegnan.github.io/">&larr; Back to Portfolio</a></li>
       <li><a class="active" href="./" aria-current="page">Overview</a></li>
@@ -24,35 +27,26 @@
       <li><a class="btn" href="./frontend/">Launch Live Demo</a></li>
     </ul>
   </nav>
-  <header class="page-header">
-    <h1 class="project-name">ZK Fitness</h1>
-    <p class="project-tagline">A workout tracker designed so your training history stays yours.</p>
-    <a class="btn" href="./frontend/">Launch Live Demo</a>
-  </header>
-
   <main id="main-content" class="main-content">
-    <p>
+    <p class="project-badges">
       <a href="https://github.com/samueladegnan/zk-fitness-platform/actions/workflows/ci.yml"><img src="https://github.com/samueladegnan/zk-fitness-platform/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
       <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-20%2B-green.svg" alt="Node 20+" /></a>
       <a href="https://github.com/samueladegnan/zk-fitness-platform/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
     </p>
 
-    <h2>A privacy-first workout tracker</h2>
-    <p><strong>ZK Fitness</strong> is a full-stack strength and cardio tracker built around a simple constraint: the service should not be able to read a user's training history. Local mode works without an account; cloud sync stores only encrypted payloads.</p>
-
-    <h2>What happens to the data</h2>
-    <p>The browser derives keys locally with Argon2id and encrypts workout state with AES-256-GCM before sync. The API persists opaque blobs and public key material, while workout analytics stay on the client.</p>
-    <p>Authentication uses ML-DSA-65 signatures. ML-KEM-768 wraps a fresh data key for each sync, giving the project a practical post-quantum cryptography path without moving private keys off the device.</p>
-
-    <h2>What you can explore</h2>
+    <h2>What it does</h2>
+    <p><strong>ZK Fitness</strong> is a full-stack strength and cardio tracker built around a clear privacy boundary. The browser owns keys, readable workout data, and analytics. The API stores public key material and opaque encrypted payloads.</p>
     <ul>
-      <li>Log strength and cardio sessions, create reusable plans, and inspect progress over time.</li>
-      <li>Run the complete demo locally with IndexedDB persistence and offline app-shell caching.</li>
-      <li>Review the client/server boundary in the <a href="./architecture.html">architecture notes</a> and inspect the automated <a href="./guardrail.html">security report</a>.</li>
-      <li>Deploy the API with PostgreSQL and Docker, or use local mode without a backend.</li>
+      <li>Log strength, cardio, and time-based sessions with reusable plans.</li>
+      <li>Track records, charts, badges, XP, and personal progress locally.</li>
+      <li>Try the full product without an account using encrypted local persistence.</li>
+      <li>Run the API with PostgreSQL and Docker when cross-device sync is needed.</li>
     </ul>
 
-    <p><strong>How this portfolio piece was made:</strong> Sam built and reviewed this project with AI assistance, while retaining responsibility for the architecture, implementation decisions, testing, and final code.</p>
+    <h2>How it works</h2>
+    <p>Argon2id and HKDF derive client-side key material. AES-256-GCM encrypts workout state before sync. ML-DSA-65 authenticates login requests, while ML-KEM-768 encapsulates a fresh sync data key. Private keys and plaintext workouts stay on the device.</p>
+
+    <p><strong>About the build:</strong> I built and reviewed this project with AI assistance. I remain responsible for the architecture, engineering decisions, testing, security model, and final code.</p>
 
     <h2>About the author</h2>
     <p>Built by <a href="https://github.com/samueladegnan">Samuel Degnan</a> as a hands-on portfolio project focused on full-stack engineering, browser cryptography, privacy boundaries, and deployable operations.</p>
@@ -60,7 +54,7 @@
 
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p class="site-footer__tagline">Privacy-first strength &amp; cardio tracking with client-side encryption.</p>
+      <p class="site-footer__tagline">A privacy-first workout tracker with a client-owned security boundary.</p>
       <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </div>
   </footer>

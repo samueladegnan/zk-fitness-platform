@@ -30,9 +30,12 @@ const app = express();
 app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
 const IS_DEV = process.env.NODE_ENV !== 'production';
 const IS_TEST = process.env.NODE_ENV === 'test';
+if (!process.env.JWT_SECRET && !IS_DEV) {
+  throw new Error('JWT_SECRET must be set in production.');
+}
+const JWT_SECRET = process.env.JWT_SECRET || 'local-development-secret';
 const COOKIE_NAME = 'zkfitness_session';
 const ORIGIN = process.env.CLIENT_ORIGIN || undefined;
 
@@ -90,7 +93,6 @@ const pool = createPool();
 // ─── Anti-Bot Registration Challenge ──────────────────────────────────────────
 const CHALLENGE_DIFFICULTY = Number(process.env.REGISTRATION_CHALLENGE_DIFFICULTY) || 12;
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
-const REGISTRATION_INVITE_CODE = process.env.REGISTRATION_INVITE_CODE;
 const challenges = new Map();
 
 function generateChallenge() {
@@ -287,12 +289,12 @@ app.get('/api/auth/challenge', authLimiter, (req, res) => {
 
 /**
  * POST /api/auth/register
- * Body: { username, dsaPublicKey, kemPublicKey, challenge, solution, inviteCode, website }
+ * Body: { username, dsaPublicKey, kemPublicKey, challenge, solution, website }
  */
 app.post('/api/auth/register', registerLimiter, authLimiter, usernameAuthLimiter, async (req, res, next) => {
   try {
     await pqcReady;
-    const { username, dsaPublicKey, kemPublicKey, challenge, solution, inviteCode, website } = req.body;
+    const { username, dsaPublicKey, kemPublicKey, challenge, solution, website } = req.body;
     if (!username || !dsaPublicKey || !kemPublicKey) {
       return res.status(400).json({ error: 'username, dsaPublicKey, and kemPublicKey are required' });
     }
@@ -308,10 +310,6 @@ app.post('/api/auth/register', registerLimiter, authLimiter, usernameAuthLimiter
 
     if (website && typeof website === 'string' && website.length > 0) {
       return res.status(400).json({ error: 'Invalid registration request' });
-    }
-
-    if (REGISTRATION_INVITE_CODE && inviteCode?.trim() !== REGISTRATION_INVITE_CODE.trim()) {
-      return res.status(403).json({ error: 'A valid invite code is required to register.' });
     }
 
     if (!challenge || typeof challenge !== 'string' || !solution || typeof solution !== 'number') {

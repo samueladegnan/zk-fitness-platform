@@ -27,7 +27,7 @@ This repository includes `render.yaml`, a Render Blueprint.
 2. In the Render dashboard, select **New +** > **Blueprint**.
 3. Connect the GitHub repository and choose the `main` branch.
 4. Render reads `render.yaml` and creates a web service named `zk-fitness-api`.
-5. Open the service's **Environment** tab and add the following variables:
+5. Open the service's **Environment** tab and add the following variables. Registration is protected by proof of work, rate limits, and a honeypot field.
 
    | Variable | Value |
    |---|---|
@@ -77,4 +77,4 @@ The backend uses `CLIENT_ORIGIN` to validate incoming requests and to decide how
 |---|---|
 | `CLIENT_ORIGIN` | `https://<username>.github.io` |
 
-Because the frontend and backend are on different origins, the backend sets cookies with `SameSite=None; Secure`. Both sites must use HTTPS, which is the default for both Render and GitHub Pages.
+Because the frontend and backend are on different origins, the backend sets cookies with `SameSite=None` and `Secure`. Both sites must use HTTPS, which is the default for Render and GitHub Pages.

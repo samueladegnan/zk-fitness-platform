@@ -11,7 +11,10 @@
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
   <nav class="site-nav" aria-label="Primary">
-    <a class="site-nav-brand" href="./">ZK Fitness</a>
+    <div class="site-nav-identity">
+      <a class="site-nav-brand" href="./" aria-label="ZK Fitness overview">ZK Fitness</a>
+      <span class="site-nav-tagline">A privacy-first workout tracker with a client-owned security boundary.</span>
+    </div>
     <ul class="site-nav-links">
       <li><a href="https://samueladegnan.github.io/">&larr; Back to Portfolio</a></li>
       <li><a href="./">Overview</a></li>
@@ -25,15 +28,9 @@
     </ul>
   </nav>
 
-  <header class="page-header">
-    <h1 class="project-name">ZK Fitness</h1>
-    <p class="project-tagline">A workout tracker designed so your training history stays yours.</p>
-    <a class="btn" href="./frontend/">Launch Live Demo</a>
-  </header>
-
   <main id="main-content" class="main-content">
     <h2>Live Demo</h2>
-    <p>Launch the demo above and choose <strong>Try without an account</strong>. In local mode, workout data stays in this browser. If you configure the API, cloud sync sends encrypted state rather than readable workout records.</p>
+    <p>Launch the app above and choose <strong>Try without an account</strong>. Local mode keeps the workout record in this browser. With the API configured, sync sends encrypted state rather than readable workout records.</p>
 
     <h2>Run It Locally</h2>
     <p>To run the project on your own machine:</p>
@@ -52,18 +49,18 @@ npm start
 # 4. Serve the frontend (in a new terminal)
 npx serve frontend -l 3001</code></pre>
 
-    <h2>What to Try</h2>
-    <ul>
-      <li>Click <strong>Try without an account</strong> to jump straight into the app.</li>
-      <li>Start a workout, add strength or cardio exercises, and log sets.</li>
-      <li>Build reusable workout plans and track progress in the History tab.</li>
-      <li>Tap any exercise to view records, charts, and the one-rep-max calculator.</li>
-    </ul>
+    <h2>Suggested walkthrough</h2>
+    <ol>
+      <li>Choose <strong>Try without an account</strong> to open local mode.</li>
+      <li>Start an empty workout and add a strength or cardio exercise.</li>
+      <li>Open an exercise card to inspect records, charts, and the one-rep-max estimate, then add it to the current workout.</li>
+      <li>Create a plan, add exercises from search, and check that the editor resumes where you left it.</li>
+    </ol>
   </main>
 
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p class="site-footer__tagline">Privacy-first strength &amp; cardio tracking with client-side encryption.</p>
+      <p class="site-footer__tagline">A privacy-first workout tracker with a client-owned security boundary.</p>
       <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </div>
   </footer>

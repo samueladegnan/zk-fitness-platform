@@ -662,7 +662,7 @@ function renderPasswordStrength(password) {
   meter.className = `password-strength strength-${score}`;
 }
 
-async function performPasswordAuth(username, password, inviteCode) {
+async function performPasswordAuth(username, password) {
   const salt = await deriveSalt(username);
   const { dsaKeyPair, kemKeyPair } = await deriveKeys(password, salt);
   session = { ...session, username, dsaKeyPair, kemKeyPair, salt };
@@ -691,7 +691,6 @@ async function performPasswordAuth(username, password, inviteCode) {
         dsaPublicKey: dsaPublicKeyBase64,
         kemPublicKey: kemPublicKeyBase64,
         ...challengePayload,
-        inviteCode,
       }),
     });
   } else {
@@ -766,19 +765,11 @@ function initAuthUI() {
   const authBtn = $('auth-btn');
   const toggleBtn = $('toggle-mode');
 
-  function updateInviteField() {
-    const inviteField = $('invite-code-field');
-    if (inviteField) inviteField.classList.toggle('hidden', !isRegisterMode);
-  }
-
   toggleBtn.addEventListener('click', () => {
     isRegisterMode = !isRegisterMode;
     authBtn.textContent = isRegisterMode ? 'Register' : 'Log in';
     toggleBtn.textContent = isRegisterMode ? 'Already have an account? Log in' : 'Need an account? Register';
-    updateInviteField();
   });
-
-  updateInviteField();
 
   const passwordInput = $('password');
   if (passwordInput) {
@@ -796,8 +787,6 @@ function initAuthUI() {
       return;
     }
 
-    const inviteCode = $('invite-code')?.value.trim() || undefined;
-
     if (isRegisterMode) {
       const score = evaluatePasswordStrength(password);
       if (score < 3) {
@@ -810,7 +799,7 @@ function initAuthUI() {
     showLoadingModal(`${actionText}. If this is the first request in a while, the server may need up to a minute to wake up. Please wait.`);
 
     try {
-      await performPasswordAuth(username, password, inviteCode);
+      await performPasswordAuth(username, password);
     } catch (err) {
       $('auth-error').textContent = err.message;
     } finally {
@@ -1166,6 +1155,7 @@ function renderExerciseChart(history, container, isCardio, isTimeBased, units) {
 }
 
 function openExerciseDetail(exerciseId) {
+  const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const ex = getExercise(exerciseId);
   const units = session.data.preferences.units || 'kg';
   const history = getExerciseHistory(session.data.workouts, exerciseId, units);
@@ -1293,6 +1283,7 @@ function openExerciseDetail(exerciseId) {
       const workoutId = row.dataset.workoutId;
       const date = row.dataset.date;
       modal.classList.add('hidden');
+      cleanup();
       showView('history-view');
       renderHistory(date);
       requestAnimationFrame(() => {
@@ -1311,15 +1302,37 @@ function openExerciseDetail(exerciseId) {
   // Wire up modal buttons and accessibility.
   const closeBtn = $('exercise-detail-close');
   const addBtn = $('exercise-detail-add-to-workout');
-  if (closeBtn) closeBtn.onclick = () => modal.classList.add('hidden');
   if (addBtn) {
+    addBtn.textContent = exerciseSelectCallback ? exerciseSelectButtonText : 'Add to Workout';
     addBtn.onclick = () => {
       modal.classList.add('hidden');
+      cleanup();
+
+      // Exercise cards use the same selection callback as the exercise menu.
+      // This keeps the destination intact for both an active workout and the
+      // plan editor instead of leaving the user on the detail modal.
+      const selectionCallback = exerciseSelectCallback;
+      if (selectionCallback) {
+        exerciseSelectCallback = null;
+        selectionCallback(exerciseId);
+        requestAnimationFrame(() => {
+          const destination = currentView === 'plan-editor-view'
+            ? document.querySelector('.plan-exercise-row strong[tabindex="-1"]')
+            : document.querySelector('#workout-view .btn-exercise-title');
+          destination?.focus?.();
+        });
+        return;
+      }
+
       const workout = getActiveWorkout();
       if (workout) {
         workout.exercises.push(createWorkoutExercise(exerciseId));
         setActiveWorkout(workout);
+        showView('workout-view');
         renderActiveWorkout();
+        requestAnimationFrame(() => {
+          document.querySelector('#workout-view .btn-exercise-title:last-of-type')?.focus();
+        });
       } else {
         showToast('No active workout. Start one from the dashboard or plans.', 'error');
       }
@@ -1334,6 +1347,14 @@ function openExerciseDetail(exerciseId) {
   });
 
   // Focus trap for accessibility.
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      modal.classList.add('hidden');
+      cleanup();
+      previousFocus?.focus();
+    };
+  }
+
   const focusable = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
   let focusables = Array.from(modal.querySelectorAll(focusable)).filter((el) => !el.disabled);
 
@@ -1341,6 +1362,7 @@ function openExerciseDetail(exerciseId) {
     if (e.key === 'Escape') {
       modal.classList.add('hidden');
       cleanup();
+      previousFocus?.focus();
       return;
     }
     if (e.key === 'Tab' && focusables.length > 0) {
@@ -1359,6 +1381,7 @@ function openExerciseDetail(exerciseId) {
     if (e.target === modal) {
       modal.classList.add('hidden');
       cleanup();
+      previousFocus?.focus();
     }
   }
   function cleanup() {
@@ -1516,7 +1539,7 @@ function openPlanEditor(planId) {
               return `
           <div class="plan-exercise-row" data-idx="${idx}">
             <div class="plan-exercise-info">
-              <strong>${getExercise(e.exerciseId).name}</strong>
+              <strong tabindex="-1">${getExercise(e.exerciseId).name}</strong>
               <span>${summary}</span>
             </div>
             <div class="plan-exercise-fields">

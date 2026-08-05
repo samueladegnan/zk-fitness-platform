@@ -1,5 +1,5 @@
 /**
- * AI Guardrail — Security Report Page
+ * AI Guardrail - Security Report Page
  *
  * Renders the combined ZK Fitness backend/frontend self-assessment with the
  * same state transitions and single dashboard mount as the canonical report.

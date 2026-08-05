@@ -132,10 +132,6 @@
             <label for="password">Password</label>
             <input id="password" name="password" type="password" required minlength="8" autocomplete="current-password" />
             <input type="text" id="website" name="website" class="honour" tabindex="-1" autocomplete="off" aria-hidden="true" />
-            <div id="invite-code-field" class="form-field hidden">
-              <label for="invite-code">Invite code (optional)</label>
-              <input id="invite-code" name="invite-code" type="text" autocomplete="off" placeholder="Only if required by this server" />
-            </div>
             <div id="password-strength" class="password-strength" aria-live="polite"></div>
             <div class="form-actions">
               <button type="submit" id="auth-btn">Register</button>
@@ -279,10 +275,10 @@
         <h2 id="local-modal-title">Your data stays yours</h2>
         <p>Workouts are encrypted on this device before they go anywhere. Even the server cannot read them.</p>
         <ul>
-          <li>End-to-end on-device encryption: your password and private keys never leave this device.</li>
-          <li>AES-256-GCM protects your local data; the symmetric key is derived from your password with Argon2id.</li>
-          <li>If you later enable cloud sync, only post-quantum public key material (ML-DSA-65 + ML-KEM-768) is sent to the server for authentication and key encapsulation.</li>
-          <li>Argon2id key derivation runs locally, hardening your password against brute-force attacks.</li>
+          <li>Encryption runs on this device. Your password and private keys do not leave it.</li>
+          <li>AES-256-GCM protects local data. Argon2id derives the local key material.</li>
+          <li>If you enable cloud sync, the server receives public key material and encrypted payloads, not readable workouts.</li>
+          <li>This demo explains the cryptographic boundary, but the device, browser, password, and dependencies remain part of the trust model.</li>
         </ul>
         <div class="modal-actions">
           <button id="start-local-confirm-btn" type="button">Continue</button>
@@ -328,7 +324,7 @@
     </div>
 
     <footer class="app-footer">
-      <p class="app-footer__tagline">Privacy-first strength &amp; cardio tracking with client-side encryption.</p>
+      <p class="app-footer__tagline">A privacy-first workout tracker with a client-owned security boundary.</p>
       <p class="app-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </footer>
   </div>

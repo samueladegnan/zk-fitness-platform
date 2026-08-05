@@ -1,5 +1,5 @@
 /**
- * GuardrailReportRenderer — Reusable report dashboard
+ * GuardrailReportRenderer - Reusable report dashboard
  *
  * A vanilla-JS component that renders a guardrail triage report as an
  * interactive dashboard: summary counts, Chart.js doughnut, filter/sort
@@ -124,7 +124,7 @@
         '    </div>' +
         '    <div class="search-group">' +
         '      <label for="' + this.id + '-search" class="sr-only">Search findings</label>' +
-        '      <input type="search" id="' + this.id + '-search" placeholder="Search rule, CWE, file, or message…" />' +
+        '      <input type="search" id="' + this.id + '-search" placeholder="Search rule, CWE, file, or message..." />' +
         '    </div>' +
         '    <div class="sort-group">' +
         '      <label for="' + this.id + '-sort" class="sr-only">Sort by</label>' +
@@ -416,7 +416,7 @@
         const detailRow = document.createElement("tr");
         detailRow.className = "detail-row";
         const langClass = languageFromPath(item.filePath);
-        const locationText = escapeHtml(item.filePath || "-") + " — line " + (item.line || "-") + (item.column ? ":" + item.column : "");
+        const locationText = escapeHtml(item.filePath || "-") + " - line " + (item.line || "-") + (item.column ? ":" + item.column : "");
         const verdictLabel = item.verdict === "HIGH_PRIORITY" ? "High Priority" : item.verdict === "FALSE_POSITIVE" ? "False Positive" : "Unclear";
         detailRow.innerHTML = [
           '<td colspan="5">',

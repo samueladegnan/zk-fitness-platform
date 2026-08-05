@@ -11,7 +11,10 @@
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
   <nav class="site-nav" aria-label="Primary">
-    <a class="site-nav-brand" href="./">ZK Fitness</a>
+    <div class="site-nav-identity">
+      <a class="site-nav-brand" href="./" aria-label="ZK Fitness overview">ZK Fitness</a>
+      <span class="site-nav-tagline">A privacy-first workout tracker with a client-owned security boundary.</span>
+    </div>
     <ul class="site-nav-links">
       <li><a href="https://samueladegnan.github.io/">&larr; Back to Portfolio</a></li>
       <li><a href="./">Overview</a></li>
@@ -25,27 +28,22 @@
     </ul>
   </nav>
 
-  <header class="page-header">
-    <h1 class="project-name">ZK Fitness</h1>
-    <p class="project-tagline">A workout tracker designed so your training history stays yours.</p>
-    <a class="btn" href="./frontend/">Launch Live Demo</a>
-  </header>
-
   <main id="main-content" class="main-content">
     <h2>System Architecture</h2>
-    <p>The system is intentionally split into two small tiers. The browser owns keys, plaintext, and analytics; the API handles authentication and encrypted storage.</p>
+    <p>The platform has two deliberately small tiers. The browser owns keys, plaintext, and analytics. The API handles authentication and encrypted storage without receiving readable training history.</p>
     <ul>
-      <li><strong>Client:</strong> HTML5/Vanilla JS app that handles cryptography, UI, and local state.</li>
-      <li><strong>Server:</strong> Node.js/Express API backed by PostgreSQL and containerized with Docker.</li>
+      <li><strong>Client:</strong> buildless HTML, CSS, and JavaScript app with Web Crypto, IndexedDB, PWA caching, and local analytics.</li>
+      <li><strong>Server:</strong> Node.js and Express API backed by PostgreSQL, with HTTP-only sessions, rate limits, structured logs, and health checks.</li>
     </ul>
 
     <h2>Zero-Knowledge Flow</h2>
     <ol>
       <li>You enter a password on the client.</li>
-      <li>Argon2id derives an authentication key and an encryption key.</li>
-      <li>The client encrypts workout data with AES-256-GCM.</li>
-      <li>The server stores the encrypted blob in PostgreSQL.</li>
-      <li>On retrieval, the client decrypts the blob locally with your key.</li>
+      <li>Argon2id and HKDF derive deterministic client-side key material.</li>
+      <li>ML-DSA-65 signs a server-issued login nonce.</li>
+      <li>The client encrypts workout data with AES-256-GCM and uses ML-KEM-768 to encapsulate a fresh sync key.</li>
+      <li>The server stores public keys, the encrypted blob, and the KEM ciphertext in PostgreSQL.</li>
+      <li>On retrieval, the client decapsulates and decrypts the blob locally, then calculates analytics in the browser.</li>
     </ol>
 
     <h2>Technology Stack</h2>
@@ -104,7 +102,7 @@
 
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p class="site-footer__tagline">Privacy-first strength &amp; cardio tracking with client-side encryption.</p>
+      <p class="site-footer__tagline">A privacy-first workout tracker with a client-owned security boundary.</p>
       <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </div>
   </footer>

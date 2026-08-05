@@ -12,7 +12,10 @@
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
   <nav class="site-nav" aria-label="Primary">
-    <a class="site-nav-brand" href="./">ZK Fitness</a>
+    <div class="site-nav-identity">
+      <a class="site-nav-brand" href="./" aria-label="ZK Fitness overview">ZK Fitness</a>
+      <span class="site-nav-tagline">A privacy-first workout tracker with a client-owned security boundary.</span>
+    </div>
     <ul class="site-nav-links">
       <li><a href="https://samueladegnan.github.io/">&larr; Back to Portfolio</a></li>
       <li><a href="./">Overview</a></li>
@@ -26,19 +29,14 @@
     </ul>
   </nav>
 
-  <header class="page-header">
-    <h1 class="project-name">ZK Fitness</h1>
-    <p class="project-tagline">A workout tracker designed so your training history stays yours.</p>
-    <a class="btn" href="./frontend/">Launch Live Demo</a>
-  </header>
-
   <main id="main-content" class="main-content security-report-content">
     <div class="security-report-page">
-      <div class="security-report-header">
+      <h2>Security report</h2>
+      <p class="security-report-intro">An automated review of the project’s backend and frontend trees, presented with the same engineering notes and practical context as the rest of this case study.</p>
+      <div class="security-report-context">
         <div class="report-status-label"><span class="status-dot" aria-hidden="true"></span> Live <code>backend/</code> and <code>frontend/</code> self-assessment</div>
-        <h1>Security Report</h1>
         <p class="security-report-lead">
-          This page shows the latest report produced by running ESLint and AI CICD Security Guardrail v1.1.0 against the ZK Fitness repository's <code>backend/</code> and <code>frontend/</code> trees. Results are published as part of the documentation build and should be treated as an automated review aid, not a substitute for engineering judgment.
+          This page shows the latest report from ESLint and AI CI/CD Security Guardrail v1.1.0 for the ZK Fitness <code>backend/</code> and <code>frontend/</code> trees. It is an automated review aid, not a substitute for engineering judgment.
         </p>
         <dl class="security-report-details">
           <div>
@@ -47,7 +45,7 @@
           </div>
           <div>
             <dt>Triage provider</dt>
-            <dd>Deterministic mock provider; source stays in CI</dd>
+            <dd>Deterministic mock provider. Source stays in CI.</dd>
           </div>
           <div>
             <dt>Report scope</dt>
@@ -102,7 +100,7 @@
 
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p class="site-footer__tagline">Privacy-first strength &amp; cardio tracking with client-side encryption.</p>
+      <p class="site-footer__tagline">A privacy-first workout tracker with a client-owned security boundary.</p>
       <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </div>
   </footer>
