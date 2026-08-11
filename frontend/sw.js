@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zk-fitness-v6';
+const CACHE_NAME = 'zk-fitness-v7';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const ASSETS_TO_CACHE = [
   './styles.css',
   './app.js',
   './config.js',
+  './install.js',
   './exercises.js',
   './lib/crypto.js',
   './lib/db.js',

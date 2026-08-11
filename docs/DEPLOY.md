@@ -7,7 +7,7 @@ GitHub Pages hosts only the static frontend. To enable authentication and encryp
 | App hosting | [Render](https://render.com) web service | Free |
 | Database | [Neon](https://neon.tech) Postgres | Free |
 
-Free Render web services spin down after 15 minutes of inactivity. The first request after a cold start may take 30–60 seconds.
+Free Render web services spin down after 15 minutes of inactivity. The first request after a cold start may take 30 to 60 seconds.
 
 ## Step 1: Create the Neon database
 
@@ -43,7 +43,7 @@ This repository includes `render.yaml`, a Render Blueprint.
 
    Paste the output into `JWT_SECRET`. Do not commit it.
 
-6. (Optional) Set `LOG_LEVEL` to control backend logging. The backend uses Pino for structured JSON logs. In production it defaults to `info`; set it to `debug` for more detail, or `warn` for quieter output.
+6. (Optional) Set `LOG_LEVEL` to control backend logging. The backend uses Pino for structured JSON logs. In production it defaults to `info`. Set it to `debug` for more detail, or `warn` for quieter output.
 
 7. Redeploy if necessary. The `start:prod` command runs database migrations automatically, and the `/api/health` endpoint verifies that the API and database are both reachable.
 

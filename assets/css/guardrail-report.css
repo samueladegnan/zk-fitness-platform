@@ -1,6 +1,6 @@
 /**
  * GuardrailReportRenderer drop-in styles
- * Self-contained dashboard styles for the AI CICD Security Guardrail report.
+ * Dashboard styles for the ZK Fitness security report.
  */
 
 :root {
@@ -118,6 +118,29 @@
 .status-dot--example {
   background: #f59e0b;
   box-shadow: 0 0 0 3px #fef3c7;
+}
+
+.report-owner-note {
+  margin: 0 0 1rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #a7f3d0;
+  border-radius: 0.4rem;
+  background: #ecfdf5;
+  color: #14532d;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.report-owner-note strong {
+  color: #166534;
+}
+
+.report-owner-note span {
+  display: inline-block;
+  margin-top: 0.25rem;
+  color: #34745b;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .security-report-lead {

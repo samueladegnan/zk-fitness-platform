@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>ZK Fitness - Zero-Knowledge Workout Tracker</title>
-  <meta name="description" content="A privacy-first strength and cardio tracker with local encryption, offline support, and optional encrypted sync." />
+  <meta name="description" content="A privacy-first strength and cardio tracker with browser-side encryption, offline support, and optional encrypted sync." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="ZK Fitness" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -14,90 +14,10 @@
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="stylesheet" href="styles.css" />
   <script src="config.js"></script>
+  <script defer src="install.js"></script>
   <script type="module" src="app.js"></script>
   <script defer src="vendor/argon2.min.js"></script>
   <script defer src="vendor/noble-pqc.js"></script>
-  <script>
-    let deferredInstallPrompt = null;
-    const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent)
-      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-      || window.navigator.standalone === true;
-
-    window.addEventListener('beforeinstallprompt', (event) => {
-      event.preventDefault();
-      deferredInstallPrompt = event;
-      const installButton = document.getElementById('install-app-btn');
-      if (installButton && !isStandalone) installButton.classList.remove('hidden');
-    });
-
-    window.addEventListener('appinstalled', () => {
-      deferredInstallPrompt = null;
-      document.getElementById('install-app-btn')?.classList.add('hidden');
-    });
-
-    window.addEventListener('load', () => {
-      if ('serviceWorker' in navigator) {
-        const hadController = Boolean(navigator.serviceWorker.controller);
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (hadController && !window.__zkSwRefreshing) {
-            window.__zkSwRefreshing = true;
-            window.location.reload();
-          }
-        });
-        navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
-          .then((registration) => registration.update())
-          .catch((err) => console.error('Service worker registration failed:', err));
-      }
-
-      const installButton = document.getElementById('install-app-btn');
-      const installModal = document.getElementById('install-help-modal');
-      const closeInstallModal = document.getElementById('install-help-close');
-      let installModalPreviousFocus = null;
-      const closeInstallHelp = () => {
-        installModal?.classList.add('hidden');
-        installModalPreviousFocus?.focus();
-        installModalPreviousFocus = null;
-      };
-      if (installButton && !isStandalone && (isIos || deferredInstallPrompt)) {
-        installButton.classList.remove('hidden');
-      }
-      installButton?.addEventListener('click', async () => {
-        if (deferredInstallPrompt) {
-          deferredInstallPrompt.prompt();
-          await deferredInstallPrompt.userChoice;
-          deferredInstallPrompt = null;
-          installButton.classList.add('hidden');
-          return;
-        }
-        installModalPreviousFocus = document.activeElement;
-        installModal?.classList.remove('hidden');
-        closeInstallModal?.focus();
-      });
-      closeInstallModal?.addEventListener('click', closeInstallHelp);
-      installModal?.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-          closeInstallHelp();
-          return;
-        }
-        if (event.key !== 'Tab') return;
-        const focusable = [...installModal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')];
-        if (focusable.length === 0) return;
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-      });
-      installModal?.addEventListener('click', (event) => {
-        if (event.target === installModal) closeInstallHelp();
-      });
-    });
-  </script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
@@ -130,7 +50,7 @@
             <label for="username">Username</label>
             <input id="username" name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" />
             <label for="password">Password</label>
-            <input id="password" name="password" type="password" required minlength="8" autocomplete="current-password" />
+            <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password" />
             <input type="text" id="website" name="website" class="honour" tabindex="-1" autocomplete="off" aria-hidden="true" />
             <div id="password-strength" class="password-strength" aria-live="polite"></div>
             <div class="form-actions">
@@ -273,12 +193,12 @@
     <div id="local-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="local-modal-title">
       <div class="modal-content">
         <h2 id="local-modal-title">Your data stays yours</h2>
-        <p>Workouts are encrypted on this device before they go anywhere. Even the server cannot read them.</p>
+        <p>Workouts are encrypted in the browser before they are stored. The server cannot read cloud-synced workouts.</p>
         <ul>
-          <li>Encryption runs on this device. Your password and private keys do not leave it.</li>
-          <li>AES-256-GCM protects local data. Argon2id derives the local key material.</li>
-          <li>If you enable cloud sync, the server receives public key material and encrypted payloads, not readable workouts.</li>
-          <li>This demo explains the cryptographic boundary, but the device, browser, password, and dependencies remain part of the trust model.</li>
+          <li>In account mode, your password derives the client keys. Your password and private keys do not leave this device.</li>
+          <li>Cloud sync sends public key material and encrypted payloads, not readable workouts.</li>
+          <li>Local trial mode encrypts its IndexedDB record to demonstrate the storage boundary. It is not a replacement for device security because the demo key is available to the app.</li>
+          <li>The browser, device, password, dependencies, and deployment configuration remain part of the trust model.</li>
         </ul>
         <div class="modal-actions">
           <button id="start-local-confirm-btn" type="button">Continue</button>
@@ -291,8 +211,8 @@
     <div id="loading-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="loading-modal-title" aria-live="polite">
       <div class="modal-content loading-modal-content">
         <div class="loading-spinner" aria-hidden="true"></div>
-        <h2 id="loading-modal-title">Warming up…</h2>
-        <p id="loading-modal-message">The first post-quantum key generation can take a few seconds. If the server has been idle, waking it up can take up to a minute. Please hang tight.</p>
+        <h2 id="loading-modal-title">Warming up...</h2>
+        <p id="loading-modal-message">The first post-quantum key generation can take a few seconds. If the server has been idle, waking it up can take up to a minute. Please wait.</p>
       </div>
     </div>
 

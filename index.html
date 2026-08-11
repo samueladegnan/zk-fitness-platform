@@ -35,7 +35,7 @@
     </p>
 
     <h2>What it does</h2>
-    <p><strong>ZK Fitness</strong> is a full-stack strength and cardio tracker built around a clear privacy boundary. The browser owns keys, readable workout data, and analytics. The API stores public key material and opaque encrypted payloads.</p>
+    <p><strong>ZK Fitness</strong> is a full-stack strength and cardio tracker. I designed the privacy boundary so the browser owns the keys, readable workout data, and analytics. The API stores public key material and opaque encrypted payloads.</p>
     <ul>
       <li>Log strength, cardio, and time-based sessions with reusable plans.</li>
       <li>Track records, charts, badges, XP, and personal progress locally.</li>
@@ -46,17 +46,17 @@
     <h2>How it works</h2>
     <p>Argon2id and HKDF derive client-side key material. AES-256-GCM encrypts workout state before sync. ML-DSA-65 authenticates login requests, while ML-KEM-768 encapsulates a fresh sync data key. Private keys and plaintext workouts stay on the device.</p>
 
-    <h2>Engineering focus</h2>
+    <h2>What I focused on</h2>
     <ul>
       <li><strong>Offline-first product behavior:</strong> local mode is fully usable without an account, with IndexedDB persistence and browser-side analytics.</li>
       <li><strong>Small, explicit trust boundary:</strong> the API manages sessions and encrypted storage, while the client owns readable workout state and cryptographic keys.</li>
-      <li><strong>Production discipline:</strong> the repository includes migrations, health checks, structured logs, Docker support, end-to-end coverage, and automated security review.</li>
+      <li><strong>Operational details:</strong> I included migrations, health checks, structured logs, Docker support, end-to-end coverage, and an automated security review.</li>
     </ul>
 
-    <p><strong>About the build:</strong> I built and reviewed this project with AI assistance. I remain responsible for the architecture, engineering decisions, testing, security model, and final code.</p>
+    <p><strong>About the build:</strong> I own the architecture, engineering decisions, testing, security model, and final code behind this project.</p>
 
     <h2>About the author</h2>
-    <p>Built by <a href="https://github.com/samueladegnan">Samuel Degnan</a> as a hands-on portfolio project focused on full-stack engineering, browser cryptography, privacy boundaries, and deployable operations.</p>
+    <p>I built ZK Fitness to work through full-stack engineering, browser cryptography, privacy boundaries, and deployable operations in one project. The source is available on <a href="https://github.com/samueladegnan">GitHub</a>.</p>
   </main>
 
   <footer class="site-footer">

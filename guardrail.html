@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ZK Fitness | Security Report</title>
-  <meta name="description" content="Latest AI CICD Security Guardrail triage report for the ZK Fitness project." />
+  <meta name="description" content="Security review that Samuel Degnan runs against the ZK Fitness project in GitHub Actions." />
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
   <link rel="stylesheet" href="./assets/css/style.css" />
   <link rel="stylesheet" href="./assets/css/guardrail-report.css" />
@@ -32,12 +32,16 @@
   <main id="main-content" class="main-content security-report-content">
     <div class="security-report-page">
       <h2>Security report</h2>
-      <p class="security-report-intro">An automated review of the project’s backend and frontend trees, presented with the same engineering notes and practical context as the rest of this case study.</p>
+      <p class="security-report-intro">An automated review of the ZK Fitness backend and frontend trees. I run this report from the project repository and use it as one input before release.</p>
       <div class="security-report-context">
         <div class="report-status-label"><span class="status-dot" aria-hidden="true"></span> Live <code>backend/</code> and <code>frontend/</code> self-assessment</div>
         <p class="security-report-lead">
-          This page shows the latest report from ESLint and AI CI/CD Security Guardrail v1.1.0 for the ZK Fitness <code>backend/</code> and <code>frontend/</code> trees. It is an automated review aid, not a substitute for engineering judgment.
+          This page shows the latest report from ESLint and AI CI/CD Security Guardrail v1.1.0 for the ZK Fitness <code>backend/</code> and <code>frontend/</code> trees. I built and maintain this project, run the scan in GitHub Actions, and review the output myself. It is an automated review aid, not a substitute for engineering judgment.
         </p>
+        <div class="report-owner-note" role="note">
+          <strong>Project owner:</strong> I built and maintain ZK Fitness. This report runs against my repository in GitHub Actions, and I review the results before release.<br />
+          <span>Samuel Degnan · ZK Fitness</span>
+        </div>
         <dl class="security-report-details">
           <div>
             <dt>Source scan</dt>
@@ -45,7 +49,7 @@
           </div>
           <div>
             <dt>Triage provider</dt>
-            <dd>Deterministic mock provider. Source stays in CI.</dd>
+            <dd>Deterministic mock provider. Source stays in my CI job.</dd>
           </div>
           <div>
             <dt>Report scope</dt>

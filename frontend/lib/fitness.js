@@ -44,7 +44,7 @@ function formatPlanExerciseTarget(ex, isCardio, isTimeBased, units, detailed = f
   if (isTimeBased) {
     const time = ex.targetTime || 0;
     if (detailed) {
-      const timeStr = time > 0 ? ` × ${time} sec` : '';
+      const timeStr = time > 0 ? ` x ${time} sec` : '';
       return `${sets} sets${timeStr} • ${rest}s rest`;
     }
     return time > 0 ? `${sets}x${time}s` : `${sets} sets`;
@@ -52,7 +52,7 @@ function formatPlanExerciseTarget(ex, isCardio, isTimeBased, units, detailed = f
 
   const reps = ex.targetReps || 0;
   if (detailed) {
-    const repsStr = reps > 0 ? ` × ${reps} reps` : '';
+    const repsStr = reps > 0 ? ` x ${reps} reps` : '';
     return `${sets} sets${repsStr} • ${rest}s rest`;
   }
   return reps > 0 ? `${sets}x${reps}` : `${sets} sets`;

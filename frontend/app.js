@@ -4,13 +4,12 @@
  * - Derives auth and encryption keys from the password using Argon2id + HKDF.
  * - Encrypts/decrypts workout data with Web Crypto API (AES-256-GCM).
  * - Runs the gamification engine (XP, tonnage, streak, levels, badges, PRs) on the client.
- * - NEW: Demo/portfolio mode, empty workouts, rest +/-30s, warmup helper,
+ * - Includes local trial mode, empty workouts, rest controls, warmup helpers,
  *        barbell math, confetti, sounds, plan editor, and history editing.
  */
 
 import {
   averageOneRm,
-  xpForSet,
   xpForWorkout,
   totalTonnage,
   computeStats,
@@ -37,7 +36,6 @@ import { getExerciseById, EXERCISE_CATALOG, isTimeBasedExercise } from './exerci
 import { saveLocalData, loadLocalData, clearLocalData } from './lib/db.js';
 import {
   arrayBufferToBase64,
-  base64ToArrayBuffer,
   bufferFromString,
   deriveSalt,
   deriveKeys,
@@ -140,9 +138,6 @@ function resetApiFailureState() {
 }
 
 // ─── Local Mode Constants ───────────────────────────────────────────────────
-const LOCAL_KEY_BASE64 = 'local-local-local-local-local-local-local-local'; // 32 bytes placeholder handled below
-const LOCAL_STORAGE_KEY = 'zkfitness_local_data';
-
 // Callback for the shared security/demonstration modal.
 let securityModalCallback = null;
 
@@ -179,7 +174,7 @@ async function api(path, options = {}) {
       ...options,
     });
   } catch (networkErr) {
-    throw new Error('Unable to reach the backend. Please check your connection and try again. If the backend has just started, it may need 30–60 seconds to become available.');
+    throw new Error('Unable to reach the backend. Please check your connection and try again. If the backend has just started, it may need 30 to 60 seconds to become available.');
   }
 
   let body = {};
@@ -514,6 +509,7 @@ function toggleUnits() {
   // Recompute XP for every workout now that weights are in the new unit.
   session.data.workouts = session.data.workouts.map((w) => applyPastWorkoutChanges(w, next));
 
+
   syncDataImmediate();
   return next;
 }
@@ -764,15 +760,17 @@ function initAuthUI() {
   const authForm = $('auth-form');
   const authBtn = $('auth-btn');
   const toggleBtn = $('toggle-mode');
+  const passwordInput = $('password');
 
   toggleBtn.addEventListener('click', () => {
     isRegisterMode = !isRegisterMode;
     authBtn.textContent = isRegisterMode ? 'Register' : 'Log in';
     toggleBtn.textContent = isRegisterMode ? 'Already have an account? Log in' : 'Need an account? Register';
+    passwordInput.autocomplete = isRegisterMode ? 'new-password' : 'current-password';
   });
 
-  const passwordInput = $('password');
   if (passwordInput) {
+    passwordInput.autocomplete = isRegisterMode ? 'new-password' : 'current-password';
     passwordInput.addEventListener('input', (e) => renderPasswordStrength(e.target.value));
   }
 

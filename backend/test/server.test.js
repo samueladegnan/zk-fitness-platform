@@ -241,4 +241,5 @@ describe('Sync endpoints', () => {
   it('rejects unauthenticated sync access', async () => {
     await request(app).get('/api/sync').expect(401);
   });
+;
 });

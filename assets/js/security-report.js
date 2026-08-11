@@ -1,7 +1,7 @@
 /**
- * AI Guardrail - Security Report Page
+ * ZK Fitness Security Report Page
  *
- * Renders the combined ZK Fitness backend/frontend self-assessment with the
+ * Renders the combined backend/frontend self-assessment with the
  * same state transitions and single dashboard mount as the canonical report.
  */
 (function () {
@@ -38,16 +38,16 @@
 
     if (reason === "clean") {
       setDisplay("security-live-success", "block");
-      setText("security-example-label", "Example dashboard · live scan clean");
+      setText("security-example-label", "Example dashboard. Live scan clean");
       setText("security-example-title", "Example findings are shown below");
       setText(
         "security-example-copy",
         "The real Guardrail scan found no issues in this repository. The dashboard below uses committed synthetic data to demonstrate how findings are presented; these example findings are not real repository issues."
       );
-      setStatus("Live scan clean · example dashboard", true);
+      setStatus("Live scan clean. Example dashboard", true);
     } else {
       setDisplay("security-live-success", "none");
-      setText("security-example-label", "Example dashboard · live scan unavailable");
+      setText("security-example-label", "Example dashboard. Live scan unavailable");
       setText("security-example-title", "Illustrative findings are shown below");
       setText(
         "security-example-copy",
@@ -70,7 +70,7 @@
         "One or more report scopes were unavailable in this build. The dashboard below shows the available live results; synthetic findings are not being presented for the unavailable scope."
       );
     }
-    setStatus(isMixed ? "Partial live scan · unavailable scope" : "Live backend/ and frontend/ self-assessment", isMixed);
+    setStatus(isMixed ? "Partial live scan. Unavailable scope" : "Live backend/ and frontend/ self-assessment", isMixed);
   }
 
   function showEmptyState(message) {
@@ -89,7 +89,7 @@
       "security-empty-copy",
       "The live scan is clean, but the committed example dashboard could not be loaded in this build. No example findings are being shown; please retry after the next Pages build."
     );
-    setStatus("Live scan clean · example unavailable", true);
+    setStatus("Live scan clean. Example unavailable", true);
   }
 
   function showExampleFailureAfterUnavailableScan() {

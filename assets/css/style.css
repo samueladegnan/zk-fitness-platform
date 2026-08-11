@@ -246,7 +246,37 @@ textarea:focus-visible {
   transform: translateY(-1px);
 }
 
-/* Main documentation content, matching the SEEO reading width. */
+.demo-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin: 1.25rem 0;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--green-border);
+  border-left: 4px solid var(--green);
+  border-radius: 0.5rem;
+  background: #f3faf6;
+}
+
+.demo-cta p {
+  margin: 0;
+}
+
+.demo-cta__eyebrow {
+  margin-bottom: 0.25rem !important;
+  color: var(--green);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.demo-cta__copy {
+  max-width: 42rem;
+}
+
+/* Main documentation content */
 .main-content {
   width: 100%;
   max-width: 64rem;
@@ -407,24 +437,20 @@ textarea:focus-visible {
   }
 
   .site-nav-links {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    justify-content: stretch;
-    gap: 0.25rem 0.5rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.35rem;
     width: 100%;
   }
 
   .site-nav-links li {
+    flex: 1 1 calc(33.333% - 0.35rem);
     min-width: 0;
   }
 
   .site-nav-links li:first-child,
   .site-nav-links li:last-child {
-    grid-column: 1 / -1;
-  }
-
-  .site-nav-links li:nth-last-child(2) {
-    grid-column: span 2;
+    flex-basis: 100%;
   }
 
   .site-nav-links a {
@@ -443,6 +469,11 @@ textarea:focus-visible {
   .btn {
     width: 100%;
     margin-right: 0;
+  }
+
+  .demo-cta {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .main-content {

@@ -2,19 +2,19 @@
 
 🌐 **Live project:** [samueladegnan.github.io/zk-fitness-platform](https://samueladegnan.github.io/zk-fitness-platform/)
 
-ZK Fitness is a privacy-first strength and cardio tracker. The browser owns the user's keys, plaintext workout data, and analytics. The API stores public key material and encrypted sync payloads, never readable training history.
+ZK Fitness is a privacy-first strength and cardio tracker. I designed the browser to own the user's keys, plaintext workout data, and analytics. The API stores public key material and encrypted sync payloads, never readable training history.
 
-I built and reviewed this project with AI assistance. I remain responsible for the architecture, security model, implementation decisions, tests, and final code.
+I own the architecture, security model, implementation decisions, tests, and final code behind this project.
 
 ## Why it exists
 
-Fitness data is personal, but most tracking products require users to trust a vendor with the raw record. ZK Fitness explores a different boundary: keep the useful product experience while making the server unable to read the training history it stores.
+Fitness data is personal, but most tracking products require users to trust a vendor with the raw record. I built ZK Fitness to explore a different boundary: keep the useful product experience while making the server unable to read the training history it stores.
 
 ## What is implemented
 
 - Client-side workout logging for strength, cardio, and time-based exercises
 - Reusable workout plans, exercise search, custom exercises, history, records, charts, badges, XP, and personal records
-- Local mode with encrypted IndexedDB persistence and no account required
+- Local mode with browser-side encrypted IndexedDB persistence and no account required. This mode is a self-contained demonstration and still depends on the device and browser trust boundary.
 - Optional encrypted cloud sync through a Node.js and PostgreSQL API
 - Installable PWA with an offline app shell
 - Client-side post-quantum authentication and key encapsulation
@@ -61,7 +61,7 @@ This is a portfolio implementation, not a claim that application-level cryptogra
         └─────────────┘
 ```
 
-The [architecture notes](architecture.html) describe the boundary in more detail. The [security report](guardrail.html) shows the automated CI review output and clearly labels illustrative data when a live report is unavailable.
+The [architecture notes](architecture.html) describe the boundary in more detail. The [security report](guardrail.html) shows the automated CI review that I run against this repository and clearly labels illustrative data when a live report is unavailable.
 
 ## Technology choices
 
@@ -76,11 +76,11 @@ The [architecture notes](architecture.html) describe the boundary in more detail
 | Observability | Pino structured logging and database-aware health checks |
 | Quality | ESLint, Node test runner, Supertest, Playwright |
 
-The frontend stays buildless on purpose. Native browser APIs and vendored cryptography keep the deployed client small and make the runtime boundary easy to inspect. JSDoc and `jsconfig.json` provide editor and static analysis support without adding a transpiler.
+The frontend stays buildless on purpose. Native browser APIs and vendored cryptography keep the deployed client small and make the runtime boundary easy to inspect. JSDoc and `jsconfig.json` provide editor and static analysis support without adding a transpiler. The install prompt lives in a separate script so the deployed page can keep a strict script policy.
 
 ## Try it
 
-Open the [live demo](https://samueladegnan.github.io/zk-fitness-platform/frontend/) and choose **Try without an account**. Local mode keeps the demo self-contained in the browser.
+Open the [hosted demo](https://samueladegnan.github.io/zk-fitness-platform/frontend/) and choose **Try without an account**. Local mode keeps the demo self-contained in the browser.
 
 For the guided walkthrough, see the [demo notes](demo.html).
 

@@ -1,4 +1,5 @@
 process.env.NODE_ENV ??= 'test';
+process.env.CLIENT_ORIGIN ??= 'http://localhost:3001';
 
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -38,6 +39,7 @@ describe('Health & meta endpoints', () => {
   it('returns ok from the health endpoint', async () => {
     const res = await request(app).get('/api/health').expect(200);
     assert.equal(res.body.status, 'ok');
+    assert.match(res.headers['content-security-policy'], /script-src 'self'(?![^;]*unsafe-inline)/);
   });
 
   it('returns the authenticated session', async () => {
@@ -55,6 +57,7 @@ describe('Health & meta endpoints', () => {
   it('logs out and clears the session cookie', async () => {
     const res = await request(app)
       .post('/api/auth/logout')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .set('Cookie', cookie)
       .expect(200);
     assert.equal(res.body.message, 'Logged out');
@@ -65,6 +68,7 @@ describe('Registration validation', () => {
   it('rejects registration without required fields', async () => {
     await request(app)
       .post('/api/auth/register')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .send({ username: TEST_USER })
       .expect(400);
   });
@@ -73,6 +77,7 @@ describe('Registration validation', () => {
     const kp = await generateTestKeyPair();
     await request(app)
       .post('/api/auth/register')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .send({
         username: 'ab',
         dsaPublicKey: kp.dsaPublicKey,
@@ -88,6 +93,7 @@ describe('Registration validation', () => {
     const challengeRes = await request(app).get('/api/auth/challenge').expect(200);
     await request(app)
       .post('/api/auth/register')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .send({
         username: 'badchallengeuser',
         dsaPublicKey: kp.dsaPublicKey,
@@ -114,6 +120,7 @@ describe('Sync lifecycle', () => {
 
     await request(app)
       .put('/api/sync')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .set('Cookie', cookie)
       .send({ encryptedBlob: blob, kemCiphertext })
       .expect(200);
@@ -133,6 +140,7 @@ describe('Sync lifecycle', () => {
 
     await request(app)
       .put('/api/sync')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .set('Cookie', cookie)
       .send({ encryptedBlob: blob, kemCiphertext })
       .expect(200);
@@ -148,6 +156,7 @@ describe('Sync lifecycle', () => {
     const hugeBlob = 'x'.repeat(2_000_001);
     await request(app)
       .put('/api/sync')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .set('Cookie', cookie)
       .send({ encryptedBlob: hugeBlob, kemCiphertext: 'x' })
       .expect(400);
@@ -155,6 +164,27 @@ describe('Sync lifecycle', () => {
 
   it('rejects unauthenticated sync access', async () => {
     await request(app).get('/api/sync').expect(401);
-    await request(app).put('/api/sync').send({ encryptedBlob: 'x', kemCiphertext: 'y' }).expect(401);
+    await request(app)
+      .put('/api/sync')
+      .set('Origin', process.env.CLIENT_ORIGIN)
+      .send({ encryptedBlob: 'x', kemCiphertext: 'y' })
+      .expect(401);
+  });
+
+  it('rejects state changes without an origin', async () => {
+    await request(app)
+      .put('/api/sync')
+      .set('Cookie', cookie)
+      .send({ encryptedBlob: 'x', kemCiphertext: 'y' })
+      .expect(403);
+  });
+
+  it('rejects state changes from an untrusted origin', async () => {
+    await request(app)
+      .put('/api/sync')
+      .set('Origin', 'https://evil.example')
+      .set('Cookie', cookie)
+      .send({ encryptedBlob: 'x', kemCiphertext: 'y' })
+      .expect(403);
   });
 });

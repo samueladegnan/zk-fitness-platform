@@ -88,6 +88,7 @@ async function registerUser(app, username, keyPair) {
   const solution = solvePoW(keyPair.dsaPublicKey, challengeRes.body.nonce, challengeRes.body.difficulty);
   const res = await request(app)
     .post('/api/auth/register')
+    .set('Origin', process.env.CLIENT_ORIGIN)
     .send({
       username,
       dsaPublicKey: keyPair.dsaPublicKey,
@@ -102,11 +103,13 @@ async function registerUser(app, username, keyPair) {
 async function loginUser(app, username, keyPair) {
   const nonceRes = await request(app)
     .post('/api/auth/login')
+    .set('Origin', process.env.CLIENT_ORIGIN)
     .send({ username })
     .expect(200);
   const signature = await signNonce(nonceRes.body.nonce, keyPair.dsaKeyPair.secretKey);
   const res = await request(app)
     .post('/api/auth/login')
+    .set('Origin', process.env.CLIENT_ORIGIN)
     .send({
       username,
       signature: arrayBufferToBase64(signature),

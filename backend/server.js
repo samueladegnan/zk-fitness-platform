@@ -37,7 +37,12 @@ if (!process.env.JWT_SECRET && !IS_DEV) {
 }
 const JWT_SECRET = process.env.JWT_SECRET || 'local-development-secret';
 const COOKIE_NAME = 'zkfitness_session';
-const ORIGIN = process.env.CLIENT_ORIGIN || undefined;
+const ORIGIN = process.env.CLIENT_ORIGIN
+  ? process.env.CLIENT_ORIGIN.replace(/\/$/, '')
+  : undefined;
+if (!ORIGIN && !IS_DEV) {
+  throw new Error('CLIENT_ORIGIN must be set in production.');
+}
 
 // ─── Post-Quantum Crypto (ESM-only dependency) ─────────────────────────────
 let ml_dsa65;
@@ -56,7 +61,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "blob:"],
       connectSrc: ["'self'"].concat(ORIGIN ? [ORIGIN] : []),
@@ -86,6 +91,17 @@ app.use(cookieParser());
 app.use(pinoHttp({ logger }));
 
 app.use(express.json({ limit: '2mb' }));
+
+// Browsers send Origin on state-changing cross-site requests. CORS controls
+// which scripts may read responses, but it does not stop a forged request
+// carrying an existing cookie. Reject mutations from any other origin.
+function requireTrustedOrigin(req, res, next) {
+  if (!ORIGIN || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next()
+  if (req.get('origin') === ORIGIN) return next()
+  return res.status(403).json({ error: 'Untrusted request origin' })
+}
+
+app.use('/api/', requireTrustedOrigin)
 
 // ─── Database ───────────────────────────────────────────────────────────────
 const pool = createPool();
@@ -312,8 +328,13 @@ app.post('/api/auth/register', registerLimiter, authLimiter, usernameAuthLimiter
       return res.status(400).json({ error: 'Invalid registration request' });
     }
 
-    if (!challenge || typeof challenge !== 'string' || !solution || typeof solution !== 'number') {
-      return res.status(400).json({ error: 'Registration challenge and solution are required' });
+    if (
+      !challenge
+      || typeof challenge !== 'string'
+      || !Number.isInteger(solution)
+      || solution < 0
+    ) {
+      return res.status(400).json({ error: 'Registration challenge and solution are required' })
     }
     if (!verifyPoW(dsaPublicKey, challenge, solution)) {
       return res.status(403).json({ error: 'Invalid or expired registration challenge. Please try again.' });

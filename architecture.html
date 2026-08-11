@@ -30,13 +30,13 @@
 
   <main id="main-content" class="main-content">
     <h2>System Architecture</h2>
-    <p>The platform has two deliberately small tiers. The browser owns keys, plaintext, and analytics. The API handles authentication and encrypted storage without receiving readable training history.</p>
+    <p>The platform has two clear tiers. The browser owns keys, plaintext, and analytics. The API handles authentication and encrypted storage without receiving readable training history.</p>
     <ul>
       <li><strong>Client:</strong> buildless HTML, CSS, and JavaScript app with Web Crypto, IndexedDB, PWA caching, and local analytics.</li>
       <li><strong>Server:</strong> Node.js and Express API backed by PostgreSQL, with HTTP-only sessions, rate limits, structured logs, and health checks.</li>
     </ul>
 
-    <h2>Zero-Knowledge Flow</h2>
+    <h2>Data Flow</h2>
     <ol>
       <li>You enter a password on the client.</li>
       <li>Argon2id and HKDF derive deterministic client-side key material.</li>
@@ -84,7 +84,7 @@
         <tr>
           <td>Observability</td>
           <td>Pino structured logging</td>
-          <td>Production-grade JSON logs and DB-aware health checks</td>
+          <td>JSON logs and database-aware health checks</td>
         </tr>
         <tr>
           <td>Database</td>

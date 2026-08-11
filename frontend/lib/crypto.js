@@ -1,5 +1,5 @@
 /**
- * Zero-Knowledge Fitness Platform — Client-side cryptography.
+ * Zero-Knowledge Fitness Platform. Client-side cryptography.
  *
  * This module isolates all key-derivation, encryption, and post-quantum
  * primitives so the rest of the frontend can treat crypto as a black box.
@@ -141,11 +141,15 @@ export async function solvePoW(authKeyHash, nonce, difficulty) {
 }
 
 /**
- * Return the fixed AES-GCM key used for local-only (demo) mode.
+ * Return the fixed AES-GCM key used for local-only demo mode.
+ *
+ * This protects the IndexedDB record from casual inspection but does not
+ * protect against code running in the same origin. Account mode uses keys
+ * derived from the user's password instead.
  * @returns {Promise<CryptoKey>}
  */
 export async function getLocalEncKey() {
-  // Local mode uses a fixed, non-secret key because data lives only in localStorage.
+  // Local mode uses a fixed, non-secret key for the self-contained demo.
   const raw = new Uint8Array(32);
   for (let i = 0; i < raw.length; i++) raw[i] = i;
   return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);

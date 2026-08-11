@@ -688,7 +688,7 @@ describe('computeBadges', () => {
 describe('formatPlanExerciseTarget', () => {
   it('formats strength targets with sets and reps', () => {
     assert.strictEqual(formatPlanExerciseTarget({ targetSets: 3, targetReps: 8, restSeconds: 90 }, false, false, 'kg', false), '3x8');
-    assert.strictEqual(formatPlanExerciseTarget({ targetSets: 3, targetReps: 8, restSeconds: 90 }, false, false, 'kg', true), '3 sets × 8 reps • 90s rest');
+    assert.strictEqual(formatPlanExerciseTarget({ targetSets: 3, targetReps: 8, restSeconds: 90 }, false, false, 'kg', true), '3 sets x 8 reps • 90s rest');
   });
 
   it('falls back for missing strength reps', () => {
