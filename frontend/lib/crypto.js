@@ -66,7 +66,8 @@ export async function deriveSalt(username) {
  */
 export async function deriveKeys(masterPassword, salt) {
   const argonParams = {
-    pass: masterPassword,
+    // Pass bytes so the browser never enters Argon2's Node Buffer fallback.
+    pass: bufferFromString(masterPassword),
     salt,
     type: argon2.ArgonType.Argon2id,
     hashLen: 32,

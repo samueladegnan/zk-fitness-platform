@@ -62,4 +62,36 @@ test.describe('Local trial workout flow', () => {
     await expect(page.locator('#plan-exercises-list .plan-exercise-row')).toHaveCount(1);
     await expect(page.locator('#plan-exercises-list')).toContainText('Squat');
   });
+
+  test('cloud login reaches the API without requiring the Node Buffer global', async ({ page }) => {
+    test.setTimeout(120_000);
+    let loginCalls = 0;
+
+    await page.route('**/api/auth/login', async (route) => {
+      loginCalls += 1;
+      const body = route.request().postDataJSON() || {};
+      if (!body.signature) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ nonce: 'synthetic-login-nonce' }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'synthetic login stop' }),
+      });
+    });
+
+    await page.goto('/index.html');
+    await page.getByRole('button', { name: /Already have an account/ }).click();
+    await page.locator('#username').fill('browser-test-user');
+    await page.locator('#password').fill('NotARealPassword!123');
+    await page.locator('#auth-btn').click();
+
+    await expect(page.locator('#auth-error')).toHaveText('synthetic login stop', { timeout: 120_000 });
+    expect(loginCalls).toBe(2);
+  });
 });

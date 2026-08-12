@@ -22,9 +22,9 @@ run([
   '--format=esm',
   '--platform=browser',
   `--outfile=${join(frontendVendor, 'poseidon.js')}`,
+  `--inject:${join(root, 'zk', 'shims', 'buffer-global.js')}`,
   `--alias:assert=${join(root, 'zk', 'shims', 'assert.js')}`,
   `--alias:events=${join(root, 'zk', 'shims', 'events.js')}`,
-  `--alias:buffer=${join(root, 'zk', 'shims', 'buffer.js')}`,
   `--alias:fs=${join(root, 'zk', 'shims', 'fs.js')}`,
 ]);
 
