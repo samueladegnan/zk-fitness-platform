@@ -26,6 +26,7 @@ pgdata/
 
 # Generated static site
 site/
+dist/
 
 # Guardrail CI artifacts
 health-check.sarif
