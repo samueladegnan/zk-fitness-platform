@@ -3,8 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZK Fitness | Security Report</title>
-  <meta name="description" content="Security review that Samuel Degnan runs against the ZK Fitness project in GitHub Actions." />
+  <title>ZK Fitness | Automated Security Triage</title>
+  <meta name="description" content="An automated ESLint and Guardrail triage report for the ZK Fitness repository, with clear limits on what the scan can establish." />
+  <meta name="author" content="Samuel Degnan" />
+  <meta name="robots" content="index,follow" />
+  <link rel="canonical" href="https://samueladegnan.github.io/zk-fitness-platform/security/" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="ZK Fitness | Automated Security Triage" />
+  <meta property="og:description" content="An automated repository scan that is useful for triage, but not a substitute for engineering review." />
+  <meta property="og:url" content="https://samueladegnan.github.io/zk-fitness-platform/security/" />
+  <meta name="twitter:card" content="summary" />
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
   <link rel="stylesheet" href="./assets/css/style.css" />
   <link rel="stylesheet" href="./assets/css/guardrail-report.css" />
@@ -14,10 +22,10 @@
   <nav class="site-nav" aria-label="Primary">
     <div class="site-nav-identity">
       <a class="site-nav-brand" href="./" aria-label="ZK Fitness overview">ZK Fitness</a>
-      <span class="site-nav-tagline">A privacy-first workout tracker with a client-owned security boundary.</span>
+      <span class="site-nav-tagline">A workout tracker with a client-owned encryption boundary.</span>
     </div>
     <ul class="site-nav-links">
-      <li><a href="https://samueladegnan.github.io/">&larr; Back to Portfolio</a></li>
+      <li><a href="https://samueladegnan.github.io/">&larr; Portfolio</a></li>
       <li><a href="./">Overview</a></li>
       <li><a href="./demo.html">Live Demo</a></li>
       <li><a href="./architecture.html">Architecture</a></li>
@@ -31,8 +39,8 @@
 
   <main id="main-content" class="main-content security-report-content">
     <div class="security-report-page">
-      <h2>Security report</h2>
-      <p class="security-report-intro">An automated review of the ZK Fitness backend and frontend trees. I run this report from the project repository and use it as one input before release.</p>
+      <h1>Automated security triage</h1>
+      <p class="security-report-intro">This page publishes an automated review of the ZK Fitness backend and frontend trees. It is one input for engineering review, not an independent security assessment.</p>
       <div class="security-report-context">
         <div class="report-status-label"><span class="status-dot" aria-hidden="true"></span> Live <code>backend/</code> and <code>frontend/</code> self-assessment</div>
         <p class="security-report-lead">
@@ -61,8 +69,7 @@
         </p>
       </div>
 
-      <div class="report-disclaimer" role="note">
-        <strong>How to read this report:</strong> these are automated triage results, not a guarantee that the repository is vulnerability-free.
+      <div class="report-disclaimer" role="note">          <strong>How to read this report:</strong> these are automated triage results. They do not establish that the repository is free of vulnerabilities.
         Findings should be verified by an engineer before being accepted or dismissed.
       </div>
 
@@ -104,7 +111,7 @@
 
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p class="site-footer__tagline">A privacy-first workout tracker with a client-owned security boundary.</p>
+      <p class="site-footer__tagline">A workout tracker with a client-owned encryption boundary.</p>
       <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </div>
   </footer>

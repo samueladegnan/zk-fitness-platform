@@ -3,106 +3,171 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZK Fitness | Architecture</title>
-  <meta name="description" content="Architecture of the ZK Fitness zero-knowledge workout tracking platform." />
+  <title>ZK Fitness | Architecture and Cryptography</title>
+  <meta name="description" content="Architecture, trust boundary, cryptography decisions, and limitations for the ZK Fitness portfolio project." />
+  <meta name="author" content="Samuel Degnan" />
+  <meta name="robots" content="index,follow" />
+  <link rel="canonical" href="https://samueladegnan.github.io/zk-fitness-platform/architecture/" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="ZK Fitness | Architecture and Cryptography" />
+  <meta property="og:description" content="How the browser, IndexedDB, encryption boundary, API sessions, public keys, and PostgreSQL fit together." />
+  <meta property="og:url" content="https://samueladegnan.github.io/zk-fitness-platform/architecture/" />
+  <meta name="twitter:card" content="summary" />
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
   <link rel="stylesheet" href="./assets/css/style.css" />
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'neutral' });
+  </script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
   <nav class="site-nav" aria-label="Primary">
     <div class="site-nav-identity">
       <a class="site-nav-brand" href="./" aria-label="ZK Fitness overview">ZK Fitness</a>
-      <span class="site-nav-tagline">A privacy-first workout tracker with a client-owned security boundary.</span>
+      <span class="site-nav-tagline">A workout tracker with a client-owned encryption boundary.</span>
     </div>
     <ul class="site-nav-links">
-      <li><a href="https://samueladegnan.github.io/">&larr; Back to Portfolio</a></li>
+      <li><a href="https://samueladegnan.github.io/">&larr; Portfolio</a></li>
       <li><a href="./">Overview</a></li>
-      <li><a href="./demo.html">Live Demo</a></li>
+      <li><a href="./demo.html">Demo</a></li>
       <li><a class="active" href="./architecture.html" aria-current="page">Architecture</a></li>
-      <li><a href="./guardrail.html">Security Report</a></li>
-      <li>
-        <a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform" aria-label="View source on GitHub">GitHub</a>
-      </li>
-      <li><a class="btn" href="./frontend/">Launch Live Demo</a></li>
+      <li><a href="./guardrail.html">Security report</a></li>
+      <li><a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform">Source</a></li>
+      <li><a class="btn" href="./frontend/">Try the app</a></li>
     </ul>
   </nav>
 
   <main id="main-content" class="main-content">
-    <h2>System Architecture</h2>
-    <p>The platform has two clear tiers. The browser owns keys, plaintext, and analytics. The API handles authentication and encrypted storage without receiving readable training history.</p>
-    <ul>
-      <li><strong>Client:</strong> buildless HTML, CSS, and JavaScript app with Web Crypto, IndexedDB, PWA caching, and local analytics.</li>
-      <li><strong>Server:</strong> Node.js and Express API backed by PostgreSQL, with HTTP-only sessions, rate limits, structured logs, and health checks.</li>
-    </ul>
+    <h1>Architecture and cryptography</h1>
+    <p>The central design decision is simple. The browser owns readable workout state. The API provides optional account sessions, proof verification, and opaque encrypted storage. Local mode works without an account and does not run the account proof flow. The ZK layer is a scoped proof-carrying sync experiment, not a claim that the whole application is formally verified.</p>
 
-    <h2>Data Flow</h2>
+    <h2>System boundary</h2>
+    <div class="mermaid">
+flowchart LR
+  subgraph B[Browser or installed PWA]
+    P[Browser plaintext state]
+    K[Private keys in memory]
+    I[(IndexedDB encrypted record)]
+    E[Encryption boundary<br/>AES-256-GCM]
+    A[Browser-side analytics]
+    S[API session<br/>HTTP-only JWT cookie]
+    PK[Public key material]
+  end
+  subgraph C[Optional API mode]
+    API[Node.js and Express API]
+    O[Opaque encrypted payloads]
+    DB[(PostgreSQL)]
+  end
+  P --> A
+  P --> E
+  K --> E
+  E --> I
+  K --> S
+  PK --> API
+  S <-->|HTTPS| API
+  E --> O
+  O <-->|HTTPS| API
+  API --> DB
+  API -. no readable workout state .-> DB
+    </div>
+    <details>
+      <summary>Accessible text version</summary>
+      <p>Plaintext workout state, private keys, public key material, analytics, proof generation, and the encryption boundary are in the browser. IndexedDB stores an encrypted record. An optional HTTP-only JWT session connects the browser to the Node.js and Express API. The API verifies proof metadata, stores a nullifier, and stores opaque encrypted payloads in PostgreSQL without receiving readable workout state.</p>
+    </details>
+    <pre><code>Browser plaintext state
+  ├─ private keys and public key material
+  ├─ browser-side analytics
+  ├─ AES-256-GCM encryption boundary
+  └─ IndexedDB encrypted record
+                 │ optional HTTPS sync
+                 ▼
+        API session and Express API
+                 │
+                 ▼
+       PostgreSQL opaque payloads</code></pre>
+    <p>The service worker caches static application assets for offline startup. It does not intercept API requests. IndexedDB stores the encrypted blob and the optional KEM ciphertext, not the parsed workout object.</p>
+
+    <h2>Data flow</h2>
     <ol>
-      <li>You enter a password on the client.</li>
-      <li>Argon2id and HKDF derive deterministic client-side key material.</li>
-      <li>ML-DSA-65 signs a server-issued login nonce.</li>
-      <li>The client encrypts workout data with AES-256-GCM and uses ML-KEM-768 to encapsulate a fresh sync key.</li>
-      <li>The server stores public keys, the encrypted blob, and the KEM ciphertext in PostgreSQL.</li>
-      <li>On retrieval, the client decapsulates and decrypts the blob locally, then calculates analytics in the browser.</li>
+      <li>The user enters a password in the browser during account registration or login.</li>
+      <li>Argon2id stretches the password. HKDF expands the result into deterministic seeds for the ML-DSA and ML-KEM key pairs.</li>
+      <li>The server issues a login nonce. The client signs it with ML-DSA-65. The API returns an HTTP-only JWT session cookie after verification.</li>
+      <li>The client serializes workout state and encrypts it with AES-256-GCM using a random 12-byte IV.</li>
+      <li>In account mode, ML-KEM-768 encapsulates a fresh shared secret that becomes the AES data key for the payload.</li>
+      <li>The browser computes a Groth16 proof over the private workout summary, identity secret, state nonce, thresholds, and a field binding of the encrypted blob plus KEM ciphertext.</li>
+      <li>The browser stores the encrypted record locally and can send it with the proof and public signals to the API for optional account sync.</li>
+      <li>The API verifies the proof, checks the identity commitment, rejects a reused nullifier, and then PostgreSQL stores the opaque values.</li>
+      <li>On retrieval, the client decapsulates and decrypts the payload before calculating analytics.</li>
     </ol>
 
-    <h2>Technology Stack</h2>
+    <h2>Cryptography decision table</h2>
     <table>
       <thead>
         <tr>
-          <th>Component</th>
-          <th>Technology</th>
-          <th>Purpose</th>
+          <th>Concern</th>
+          <th>Algorithm</th>
+          <th>Why it is used</th>
+          <th>What it does not guarantee</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td>Frontend</td>
-          <td>HTML5, Vanilla JS, CSS</td>
-          <td>UI and local state</td>
+          <td>Password-derived key material</td>
+          <td>Argon2id plus HKDF with SHA-256</td>
+          <td>Slows password guessing and separates derived material into key seeds.</td>
+          <td>It does not make a weak password safe or protect a compromised device.</td>
         </tr>
         <tr>
-          <td>Type Safety</td>
-          <td>JSDoc + jsconfig.json with <code>checkJs</code></td>
-          <td>Static type checking without a transpiler</td>
+          <td>Login authentication</td>
+          <td>ML-DSA-65</td>
+          <td>Proves possession of the client signing key without sending the private key.</td>
+          <td>It does not establish device trust or provide password recovery.</td>
         </tr>
         <tr>
-          <td>Symmetric Encryption</td>
-          <td>Web Crypto API, AES-256-GCM, Argon2id</td>
-          <td>On-device key derivation and bulk data encryption</td>
+          <td>Sync data-key encapsulation</td>
+          <td>ML-KEM-768</td>
+          <td>Creates a fresh shared secret for an encrypted sync payload.</td>
+          <td>It does not solve availability, replay, deletion, or conflict resolution.</td>
         </tr>
         <tr>
-          <td>Post-Quantum Crypto</td>
-          <td>ML-DSA-65, ML-KEM-768 (@noble/post-quantum)</td>
-          <td>Client-side login signatures and per-sync key encapsulation</td>
+          <td>Workout validity proof</td>
+          <td>Groth16, Circom, and Poseidon</td>
+          <td>Lets the API verify private summary rules, identity knowledge, commitments, nullifiers, and an encrypted-record binding.</td>
+          <td>It does not prove AES-GCM or ML-KEM internals, prove that ciphertext decrypts to the summary, or protect a compromised browser.</td>
         </tr>
         <tr>
-          <td>Backend</td>
-          <td>Node.js, Express</td>
-          <td>RESTful API endpoints</td>
-        </tr>
-        <tr>
-          <td>Observability</td>
-          <td>Pino structured logging</td>
-          <td>JSON logs and database-aware health checks</td>
-        </tr>
-        <tr>
-          <td>Database</td>
-          <td>PostgreSQL</td>
-          <td>Persistent storage for encrypted blobs</td>
-        </tr>
-        <tr>
-          <td>DevOps</td>
-          <td>Docker, Docker Compose</td>
-          <td>Containerization and orchestration</td>
+          <td>Payload confidentiality and integrity</td>
+          <td>AES-256-GCM</td>
+          <td>Encrypts serialized workout state and detects modified ciphertext.</td>
+          <td>It does not protect plaintext while the app is running or hide all metadata.</td>
         </tr>
       </tbody>
     </table>
+
+    <h2>Why post-quantum cryptography is included</h2>
+    <p>ML-DSA-65 and ML-KEM-768 are an engineering exploration, not a claim that a fitness app commercially requires post-quantum algorithms. Groth16 and Poseidon are also used as a scoped proof experiment. The proof does not cover AES-GCM or ML-KEM internals, and it does not prove that the ciphertext decrypts to the private summary. This project does not claim an independent cryptographic audit or a guarantee against every future threat.</p>
+
+    <h2>What is not implemented</h2>
+    <ul>
+      <li>No independent security review, penetration test, formal verification, or certification</li>
+      <li>No production-grade trusted setup. The checked-in development artifact is reproducible with a deterministic local contribution and is not a multi-party ceremony</li>
+      <li>No complete browser and device matrix</li>
+      <li>No password reset or account recovery flow</li>
+      <li>No automated two-browser cross-device test or conflict resolution</li>
+      <li>No high-availability, backup, alerting, incident response, or service-level evidence</li>
+      <li>Local demo mode uses a fixed application key and cannot protect against code running in the same origin</li>
+    </ul>
+
+    <h2>Read the evidence</h2>
+    <p><a href="https://github.com/samueladegnan/zk-fitness-platform/blob/main/docs/TESTING.md">Test instructions</a> describe the actual test commands and gaps. The <a href="./guardrail.html">security report</a> describes the automated triage workflow and labels sample data when the live report is unavailable. The <a href="https://github.com/samueladegnan/zk-fitness-platform">source repository</a> is the final authority.</p>
+
+    <p><strong>Ownership:</strong> I own the architecture, implementation, testing, security model, and final code for this project.</p>
   </main>
 
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p class="site-footer__tagline">A privacy-first workout tracker with a client-owned security boundary.</p>
+      <p class="site-footer__tagline">A workout tracker with a client-owned encryption boundary.</p>
       <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </div>
   </footer>

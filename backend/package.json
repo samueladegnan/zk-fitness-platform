@@ -1,22 +1,26 @@
 {
   "name": "zk-fitness-backend",
   "version": "1.0.0",
-  "description": "Zero-knowledge storage API for the fitness platform.",
+  "description": "Node.js API for sessions and opaque encrypted workout sync payloads.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "start:prod": "node migrate.js && node server.js",
     "dev": "node --watch server.js",
-    "test": "node migrate.js && node --test test/*.test.js",
+    "test": "node migrate.js && node --test --test-force-exit test/*.test.js",
     "lint": "eslint .",
     "migrate": "node migrate.js"
   },
+  "overrides": {
+    "underscore": "1.13.8",
+    "js-yaml": "5.2.3"
+  },
   "keywords": [
-    "zero-knowledge",
     "privacy",
     "fitness",
     "encryption",
-    "express"
+    "express",
+    "sync"
   ],
   "author": "Samuel Degnan",
   "license": "MIT",
@@ -31,7 +35,8 @@
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.14.1",
     "pino": "^9.14.0",
-    "pino-http": "^10.5.0"
+    "pino-http": "^10.5.0",
+    "snarkjs": "^0.7.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

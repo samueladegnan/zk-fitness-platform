@@ -3,65 +3,94 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZK Fitness | Zero-Knowledge Fitness Platform</title>
-  <meta name="description" content="A privacy-first, full-stack strength training and cardio tracking platform using client-side encryption and a zero-knowledge cloud architecture." />
+  <title>ZK Fitness | Client-Owned Workout Data</title>
+  <meta name="description" content="A full-stack strength and cardio tracker that keeps readable workout state in the browser and syncs encrypted payloads through an optional Node.js API." />
+  <meta name="author" content="Samuel Degnan" />
+  <meta name="robots" content="index,follow" />
+  <link rel="canonical" href="https://samueladegnan.github.io/zk-fitness-platform/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="ZK Fitness | Client-Owned Workout Data" />
+  <meta property="og:description" content="A full-stack workout tracker with browser-owned plaintext state, encrypted sync, IndexedDB persistence, and an optional PostgreSQL backend." />
+  <meta property="og:url" content="https://samueladegnan.github.io/zk-fitness-platform/" />
+  <meta property="og:site_name" content="Samuel Degnan Portfolio" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="ZK Fitness | Client-Owned Workout Data" />
+  <meta name="twitter:description" content="A privacy-first full-stack fitness tracker built around a client-owned encryption boundary." />
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
   <link rel="stylesheet" href="./assets/css/style.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    "name": "ZK Fitness",
+    "description": "A full-stack strength and cardio tracker with browser-owned plaintext state and optional encrypted sync.",
+    "codeRepository": "https://github.com/samueladegnan/zk-fitness-platform",
+    "url": "https://samueladegnan.github.io/zk-fitness-platform/",
+    "programmingLanguage": ["JavaScript", "HTML", "CSS"],
+    "license": "https://opensource.org/licenses/MIT",
+    "author": {
+      "@type": "Person",
+      "name": "Samuel Degnan",
+      "url": "https://samueladegnan.github.io/"
+    }
+  }
+  </script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
   <nav class="site-nav" aria-label="Primary">
     <div class="site-nav-identity">
       <a class="site-nav-brand" href="./" aria-label="ZK Fitness overview">ZK Fitness</a>
-      <span class="site-nav-tagline">A privacy-first workout tracker with a client-owned security boundary.</span>
+      <span class="site-nav-tagline">A workout tracker with a client-owned encryption boundary.</span>
     </div>
     <ul class="site-nav-links">
-      <li><a href="https://samueladegnan.github.io/">&larr; Back to Portfolio</a></li>
+      <li><a href="https://samueladegnan.github.io/">&larr; Portfolio</a></li>
       <li><a class="active" href="./" aria-current="page">Overview</a></li>
-      <li><a href="./demo.html">Live Demo</a></li>
+      <li><a href="./demo.html">Demo</a></li>
       <li><a href="./architecture.html">Architecture</a></li>
-      <li><a href="./guardrail.html">Security Report</a></li>
+      <li><a href="./guardrail.html">Security report</a></li>
       <li>
-        <a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform" aria-label="View source on GitHub">GitHub</a>
+        <a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform" aria-label="View source on GitHub">Source</a>
       </li>
-      <li><a class="btn" href="./frontend/">Launch Live Demo</a></li>
+      <li><a class="btn" href="./frontend/">Try the app</a></li>
     </ul>
   </nav>
   <main id="main-content" class="main-content">
     <p class="project-badges">
-      <a href="https://github.com/samueladegnan/zk-fitness-platform/actions/workflows/ci.yml"><img src="https://github.com/samueladegnan/zk-fitness-platform/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-      <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-20%2B-green.svg" alt="Node 20+" /></a>
-      <a href="https://github.com/samueladegnan/zk-fitness-platform/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+      <a href="https://github.com/samueladegnan/zk-fitness-platform/actions/workflows/ci.yml"><img src="https://github.com/samueladegnan/zk-fitness-platform/actions/workflows/ci.yml/badge.svg" alt="CI workflow status" /></a>
+      <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-20%2B-green.svg" alt="Node 20 or newer" /></a>
+      <a href="https://github.com/samueladegnan/zk-fitness-platform/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT license" /></a>
     </p>
 
-    <h2>What it does</h2>
-    <p><strong>ZK Fitness</strong> is a full-stack strength and cardio tracker. I designed the privacy boundary so the browser owns the keys, readable workout data, and analytics. The API stores public key material and opaque encrypted payloads.</p>
+    <h1>Workout data stays readable in the browser</h1>
+    <p><strong>ZK Fitness</strong> is a full-stack strength and cardio tracker built around a clear boundary. The browser owns plaintext workout state, private keys, and analytics. The optional API receives public key material and opaque encrypted payloads.</p>
+
+    <h2>What is implemented</h2>
     <ul>
-      <li>Log strength, cardio, and time-based sessions with reusable plans.</li>
-      <li>Track records, charts, badges, XP, and personal progress locally.</li>
-      <li>Try the full product without an account using encrypted local persistence.</li>
-      <li>Run the API with PostgreSQL and Docker when cross-device sync is needed.</li>
+      <li>Strength, cardio, and time-based sessions with reusable plans</li>
+      <li>Exercise search, custom exercises, history, charts, records, XP, badges, and streaks</li>
+      <li>Local mode without an account, backed by encrypted IndexedDB records</li>
+      <li>Optional account mode, encrypted sync, Groth16 proof verification, PostgreSQL persistence, and Docker startup</li>
+      <li>Argon2id and HKDF key derivation, AES-256-GCM payload encryption, ML-DSA-65 login signatures, ML-KEM-768 key encapsulation, Poseidon commitments, and a Circom Groth16 workout-validity circuit</li>
     </ul>
 
-    <h2>How it works</h2>
-    <p>Argon2id and HKDF derive client-side key material. AES-256-GCM encrypts workout state before sync. ML-DSA-65 authenticates login requests, while ML-KEM-768 encapsulates a fresh sync data key. Private keys and plaintext workouts stay on the device.</p>
+    <h2>How I approached it</h2>
+    <p>The server is responsible for sessions, validation, rate limits, health checks, proof verification, replay checks, and storage. It does not receive the password, private keys, or readable workout state. The client decrypts state before calculating fitness analytics. The proof verifies a declared private summary and its binding to the encrypted record metadata. It does not prove the AES-GCM or ML-KEM internals or that the ciphertext decrypts to that summary.</p>
+    <p>Post-quantum algorithms are included as an engineering exploration. A fitness app does not commercially require them by default. They make the project a useful place to study larger keys, challenge-response authentication, key encapsulation, and browser performance tradeoffs.</p>
 
-    <h2>What I focused on</h2>
-    <ul>
-      <li><strong>Offline-first product behavior:</strong> local mode is fully usable without an account, with IndexedDB persistence and browser-side analytics.</li>
-      <li><strong>Small, explicit trust boundary:</strong> the API manages sessions and encrypted storage, while the client owns readable workout state and cryptographic keys.</li>
-      <li><strong>Operational details:</strong> I included migrations, health checks, structured logs, Docker support, end-to-end coverage, and an automated security review.</li>
-    </ul>
+    <h2>Be precise about the scope</h2>
+    <p>This repository includes automated unit, backend integration, browser flow, ZK artifact self-test, lint, Docker build, dependency audit, secret-pattern, and guardrail checks. The browser suite focuses on local trial workflows. It does not prove coverage across every browser and failure mode, an independent security assessment, or operational reliability.</p>
 
-    <p><strong>About the build:</strong> I own the architecture, engineering decisions, testing, security model, and final code behind this project.</p>
+    <p><strong>Ownership:</strong> I own the architecture, implementation, testing, security model, and final code for this project.</p>
 
-    <h2>About the author</h2>
-    <p>I built ZK Fitness to work through full-stack engineering, browser cryptography, privacy boundaries, and deployable operations in one project. The source is available on <a href="https://github.com/samueladegnan">GitHub</a>.</p>
+    <h2>Explore the project</h2>
+    <p><a class="btn" href="./frontend/">Open the live demo</a> <a class="btn" href="./architecture.html">Read the architecture</a></p>
+    <p><a href="https://github.com/samueladegnan/zk-fitness-platform/blob/main/docs/TESTING.md">Run the test instructions</a> or inspect the <a href="https://github.com/samueladegnan/zk-fitness-platform">source repository</a>.</p>
   </main>
 
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p class="site-footer__tagline">A privacy-first workout tracker with a client-owned security boundary.</p>
+      <p class="site-footer__tagline">A workout tracker with a client-owned encryption boundary.</p>
       <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </div>
   </footer>

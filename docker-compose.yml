@@ -22,10 +22,10 @@ services:
       dockerfile: Dockerfile
     container_name: zk-fitness-api
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: 3000
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:8080}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET before starting Docker Compose}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:3001}
       DB_HOST: db
       DB_PORT: 5432
       DB_USER: ${DB_USER:-fitness}

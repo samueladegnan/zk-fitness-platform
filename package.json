@@ -1,7 +1,7 @@
 {
   "name": "zk-fitness-platform",
   "version": "1.0.0",
-  "description": "Zero-Knowledge Fitness Platform - privacy-first, full-stack strength training.",
+  "description": "Privacy-first strength and cardio tracker with a client-owned encryption boundary.",
   "scripts": {
     "start": "cd backend && npm start",
     "dev": "cd backend && npm run dev",
@@ -11,23 +11,43 @@
     "dev:stop": "npx kill-port 3000 3001 || true",
     "copy-argon2": "cp node_modules/argon2-browser/dist/argon2-bundled.min.js frontend/vendor/argon2.min.js",
     "build:pqc": "node scripts/build-pqc.mjs",
+    "zk:build": "node scripts/build-zk.mjs",
+    "zk:verify": "node scripts/verify-zk.mjs",
+    "zk:build:browser": "node scripts/build-zk-browser.mjs",
+    "build:pages": "python3 scripts/build-pages-site.py",
     "migrate": "cd backend && npm run migrate",
-    "install:backend": "cd backend && npm install",
-    "test:backend": "cd backend && npm test",
+    "install:frontend": "cd frontend && npm ci",
+    "install:backend": "cd backend && npm ci",
     "test:frontend": "cd frontend && npm test",
+    "test:backend": "cd backend && npm test",
+    "test:unit": "npm run test:frontend",
+    "test:integration": "npm run test:backend",
     "test:e2e": "npx playwright test --config e2e/playwright.config.js",
-    "test": "npm run test:backend && npm run test:frontend",
+    "test": "npm run test:unit && npm run test:integration",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:backend": "cd backend && npm run lint",
+    "lint": "npm run lint:frontend && npm run lint:backend",
+    "check": "npm run lint && npm run test:unit && npm run test:integration",
+    "security:audit": "python3 scripts/run-audit.py",
+    "security:secrets": "python3 scripts/check-secrets.py",
+    "security:guardrail": "python3 scripts/run-guardrail.py",
     "mobile:sync": "npx cap sync",
     "mobile:ios": "npx cap open ios",
     "mobile:android": "npx cap open android",
     "desktop:build": "npx tauri build"
   },
+  "overrides": {
+    "underscore": "1.13.8",
+    "js-yaml": "5.2.3",
+    "elliptic": "6.6.1",
+    "ws": "8.21.3"
+  },
   "keywords": [
-    "zero-knowledge",
     "privacy",
     "fitness",
     "encryption",
-    "full-stack"
+    "full-stack",
+    "post-quantum-cryptography"
   ],
   "author": "Samuel Degnan",
   "license": "MIT",
@@ -35,7 +55,11 @@
     "@noble/post-quantum": "^0.6.1",
     "@playwright/test": "^1.49.0",
     "argon2-browser": "^1.18.0",
+    "circom2": "^0.2.23",
+    "circomlib": "^2.0.5",
+    "circomlibjs": "^0.1.7",
     "esbuild": "^0.28.1",
-    "kill-port": "^2.0.1"
+    "kill-port": "^2.0.1",
+    "snarkjs": "^0.7.6"
   }
 }

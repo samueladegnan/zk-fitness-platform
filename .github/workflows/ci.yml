@@ -31,6 +31,9 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install root dependencies
+        run: npm ci
+
       - name: Install backend dependencies
         working-directory: ./backend
         run: npm ci
@@ -38,6 +41,12 @@ jobs:
       - name: Lint
         working-directory: ./backend
         run: npm run lint
+
+      - name: Build and verify ZK artifacts
+        run: |
+          npm run zk:build
+          npm run zk:verify
+          npm run zk:build:browser
 
       - name: Run migrations
         working-directory: ./backend
@@ -79,6 +88,9 @@ jobs:
 
       - name: Run frontend unit tests
         run: npm run test:frontend
+
+      - name: Run dependency audits
+        run: npm run security:audit
 
   e2e:
     runs-on: ubuntu-latest

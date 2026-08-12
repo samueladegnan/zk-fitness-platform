@@ -3,7 +3,7 @@
   "lang": "en",
   "name": "ZK Fitness",
   "short_name": "ZK Fitness",
-  "description": "Privacy-first strength training and cardio tracker with zero-knowledge encryption.",
+  "description": "Privacy-first strength and cardio tracker with browser-owned workout state and optional encrypted sync.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#eff6ff",

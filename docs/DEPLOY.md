@@ -1,80 +1,95 @@
-# Deploy the Backend
+# Deploy the optional API
 
-GitHub Pages hosts only the static frontend. To enable authentication and encrypted sync, deploy the Node.js/Express backend with a Postgres database.
+GitHub Pages hosts the static frontend and project documentation. Account mode and encrypted sync need the Node.js API and PostgreSQL database. Local mode works without either service.
 
-| Component | Service | Plan |
-|---|---|---|
-| App hosting | [Render](https://render.com) web service | Free |
-| Database | [Neon](https://neon.tech) Postgres | Free |
+The files in this repository describe a deployable path. They do not establish uptime, backups, monitoring, incident response, or other operational guarantees.
 
-Free Render web services spin down after 15 minutes of inactivity. The first request after a cold start may take 30 to 60 seconds.
+## Required configuration
 
-## Step 1: Create the Neon database
+The API needs these environment variables:
 
-1. Sign in to [Neon](https://neon.tech) and create a new project.
-2. Create a database named `fitness_db`.
-3. Copy the **connection string**. It has the form:
-   ```text
-   postgresql://<user>:<password>@<host>.neon.tech/fitness_db?sslmode=require
-   ```
-4. Keep the `?sslmode=require` suffix. Store the connection string for Step 2.
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` or `DB_*` variables | PostgreSQL connection details |
+| `JWT_SECRET` | Secret used to sign session cookies |
+| `CLIENT_ORIGIN` | The frontend origin allowed to make state-changing requests |
 
-## Step 2: Deploy the backend to Render
+Generate a local or hosted secret with:
 
-This repository includes `render.yaml`, a Render Blueprint.
-
-1. Push the repository to GitHub.
-2. In the Render dashboard, select **New +** > **Blueprint**.
-3. Connect the GitHub repository and choose the `main` branch.
-4. Render reads `render.yaml` and creates a web service named `zk-fitness-api`.
-5. Open the service's **Environment** tab and add the following variables. Registration is protected by proof of work, rate limits, and a honeypot field.
-
-   | Variable | Value |
-   |---|---|
-   | `DATABASE_URL` | Neon connection string from Step 1 |
-   | `JWT_SECRET` | Strong random secret (see below) |
-   | `CLIENT_ORIGIN` | Your GitHub Pages origin, e.g. `https://<username>.github.io` |
-
-   Generate a secret with:
-
-   ```bash
-   node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-   ```
-
-   Paste the output into `JWT_SECRET`. Do not commit it.
-
-6. (Optional) Set `LOG_LEVEL` to control backend logging. The backend uses Pino for structured JSON logs. In production it defaults to `info`. Set it to `debug` for more detail, or `warn` for quieter output.
-
-7. Redeploy if necessary. The `start:prod` command runs database migrations automatically, and the `/api/health` endpoint verifies that the API and database are both reachable.
-
-After deployment, the backend is available at the service URL Render provides. With the default service name in `render.yaml`, the URL is:
-
-```text
-https://zk-fitness-api.onrender.com/api
+```bash
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
 
-## Step 3: Point the frontend to the backend
+Do not commit the result.
 
-The GitHub Pages workflow injects the backend URL into `frontend/config.js` at deploy time.
+## Local Docker stack
 
-1. In GitHub, go to **Settings > Secrets and variables > Actions > Variables**.
-2. Add a repository variable named `ZK_API_BASE`.
-3. Set its value to the deployed backend root URL, for example:
+```bash
+export JWT_SECRET=$(node -e 'console.log(require("crypto").randomBytes(64).toString("hex"))')
+export CLIENT_ORIGIN="http://localhost:3001"
+docker compose up --build
+```
+
+The Compose stack starts PostgreSQL, waits for its health check, runs migrations, and starts the API at `http://localhost:3000`. The local Compose API runs in development mode so its HTTP-only cookie can be used by the HTTP frontend at `http://localhost:3001`. In another terminal, serve the frontend:
+
+```bash
+npm run dev:client
+```
+
+Check the API and database connection at:
+
+```text
+http://localhost:3000/api/health
+```
+
+Stop the stack with:
+
+```bash
+docker compose down
+```
+
+## Migration safety
+
+The migration does not silently delete legacy users or sync records. If an existing database contains rows from the pre-PQC schema, migration stops with an operator-readable error. Choose and document an explicit export, reset, or application-specific migration plan before retrying. Do not bypass that failure by deleting production data from the migration script.
+
+## Render and managed PostgreSQL
+
+`render.yaml` provides a Render Blueprint for the backend. You still need to choose a PostgreSQL provider and supply its connection string.
+
+1. Create a PostgreSQL database and copy its connection string.
+2. Create a Render Blueprint from this repository and the `main` branch.
+3. Add `DATABASE_URL`, `JWT_SECRET`, and `CLIENT_ORIGIN` in the service environment.
+4. Use the service health check at `/api/health` after deployment.
+5. Confirm the service URL and cookie behavior before pointing a hosted frontend at it.
+
+For a GitHub Pages deployment, `CLIENT_ORIGIN` should be the origin only, such as:
+
+```text
+https://samueladegnan.github.io
+```
+
+The repository path does not belong in `CLIENT_ORIGIN`.
+
+## Point GitHub Pages at the API
+
+The Pages workflow injects the API base URL into the generated `frontend/config.js` file.
+
+1. Open the repository settings in GitHub.
+2. Add an Actions repository variable named `ZK_API_BASE`.
+3. Set it to the API base URL, such as:
+
    ```text
-   https://zk-fitness-api.onrender.com/api
+   https://your-api-host.example/api
    ```
-4. Redeploy GitHub Pages. Pushes to `main` trigger this automatically.
 
-For local development, leave `ZK_API_BASE` unset. The app falls back to `http://localhost:3000/api`.
+4. Run the Pages workflow again or push a change to `main`.
 
-## Step 4: Configure CORS and cookies
+If the variable is not set, the generated frontend uses the local development default `http://localhost:3000/api`.
 
-This step explains what the `CLIENT_ORIGIN` environment variable from Step 2 does. You do **not** set it in a different place.
+## Cookies and cross-origin requests
 
-The backend uses `CLIENT_ORIGIN` to validate incoming requests and to decide how to set cookies. It must be the GitHub Pages origin (the host only, not the full repository path).
+When the frontend and API have different origins, the API uses `SameSite=None` and `Secure` cookies. Both sites must use HTTPS outside local development. The API also checks the configured origin on state-changing requests.
 
-| Setting | Example value |
-|---|---|
-| `CLIENT_ORIGIN` | `https://<username>.github.io` |
+## Deployment limitations
 
-Because the frontend and backend are on different origins, the backend sets cookies with `SameSite=None` and `Secure`. Both sites must use HTTPS, which is the default for Render and GitHub Pages.
+This setup does not include a backup policy, a high-availability topology, key rotation, password recovery, conflict resolution, a monitoring service, or an incident response process. Treat the deployment as a portfolio demonstration until those concerns are designed and operated deliberately.

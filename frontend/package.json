@@ -7,6 +7,9 @@
     "lint": "eslint .",
     "test": "node --test test/*.test.js"
   },
+  "overrides": {
+    "js-yaml": "5.2.3"
+  },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
     "eslint": "^9.22.0",

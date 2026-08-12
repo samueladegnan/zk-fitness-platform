@@ -46,6 +46,12 @@ import {
   decryptData,
 } from './lib/crypto.js';
 import {
+  deriveZkSecret,
+  createIdentityCommitment,
+  createWorkoutProof,
+  sha256Field,
+} from './lib/zk.js';
+import {
   createSet as createSetModel,
   createWorkoutExercise as createWorkoutExerciseModel,
   toggleSetStatus,
@@ -70,6 +76,8 @@ let session = {
   kemKeyPair: null,
   encKey: null, // local mode only
   salt: null,
+  zkSecret: null,
+  identityCommitment: null,
   data: {
     plans: [],
     workouts: [],
@@ -662,9 +670,11 @@ async function performPasswordAuth(username, password) {
   const salt = await deriveSalt(username);
   const { dsaKeyPair, kemKeyPair } = await deriveKeys(password, salt);
   session = { ...session, username, dsaKeyPair, kemKeyPair, salt };
-
   const dsaPublicKeyBase64 = arrayBufferToBase64(dsaKeyPair.publicKey);
   const kemPublicKeyBase64 = arrayBufferToBase64(kemKeyPair.publicKey);
+  const zkSecret = await deriveZkSecret(dsaKeyPair.secretKey);
+  const identityCommitment = await createIdentityCommitment(zkSecret);
+  session = { ...session, zkSecret, identityCommitment };
 
   if (isRegisterMode) {
     // Solve a proof-of-work challenge before registering to discourage bots.
@@ -686,6 +696,7 @@ async function performPasswordAuth(username, password) {
         username,
         dsaPublicKey: dsaPublicKeyBase64,
         kemPublicKey: kemPublicKeyBase64,
+        identityCommitment,
         ...challengePayload,
       }),
     });
@@ -927,6 +938,8 @@ async function logout() {
     kemKeyPair: null,
     encKey: null,
     salt: null,
+    zkSecret: null,
+    identityCommitment: null,
     data: {
       plans: [],
       workouts: [],
@@ -937,7 +950,8 @@ async function logout() {
   };
   stopGlobalTimer();
   clearInterval(restTimerInterval);
-  isAuthenticated = false;    isLocalMode = false;
+  isAuthenticated = false;
+  isLocalMode = false;
   renderNav();
   showView('auth-view');
   $('auth-error').textContent = 'You have been logged out.';
@@ -2954,11 +2968,10 @@ async function loadSync() {
 }
 
 async function persistEncryptedLocal() {
-  session.data.updatedAt = Date.now();
-  const encrypted = isLocalMode
-    ? await encryptData(session.data, session.encKey)
-    : await encryptData(session.data, session.kemKeyPair.publicKey);
-  await saveLocalData(session.username || 'demo', JSON.stringify({ iv: encrypted.iv, ciphertext: encrypted.ciphertext }), encrypted.kemCiphertext || 'demo-kem-ciphertext-placeholder');
+  session.data.updatedAt = Date.now();    const encrypted = isLocalMode
+      ? await encryptData(session.data, session.encKey)
+      : await encryptData(session.data, session.kemKeyPair.publicKey);
+    await saveLocalData(session.username || 'demo', JSON.stringify({ iv: encrypted.iv, ciphertext: encrypted.ciphertext }), encrypted.kemCiphertext || '');
 }
 
 function scheduleSync() {
@@ -2994,11 +3007,28 @@ async function performSync() {
 
   try {
     const encrypted = await encryptData(session.data, session.kemKeyPair.publicKey);
+    const encryptedBlob = JSON.stringify({ iv: encrypted.iv, ciphertext: encrypted.ciphertext });
+    const payloadBinding = await sha256Field(JSON.stringify({ encryptedBlob, kemCiphertext: encrypted.kemCiphertext }));
+    const proof = await createWorkoutProof(
+      session.data,
+      session.zkSecret,
+      session.identityCommitment,
+      { payloadBinding },
+    );
     await api('/sync', {
       method: 'PUT',
       body: JSON.stringify({
-        encryptedBlob: JSON.stringify({ iv: encrypted.iv, ciphertext: encrypted.ciphertext }),
-        kemCiphertext: encrypted.kemCiphertext || 'demo-kem-ciphertext-placeholder',
+        encryptedBlob,
+        kemCiphertext: encrypted.kemCiphertext,
+        proof: proof.proof,
+        publicSignals: proof.publicSignals,
+        commitment: proof.commitment,
+        nullifier: proof.nullifier,
+        payloadBinding: proof.payloadBinding,
+        identityCommitment: proof.identityCommitment,
+        minWorkoutCount: proof.minWorkoutCount,
+        minMinutes: proof.minMinutes,
+        circuitVersion: proof.circuitVersion,
       }),
     });
     if (status) status.textContent = 'Encrypted state synced successfully.';

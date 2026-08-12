@@ -21,10 +21,14 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const { randomBytes, createHash } = require('crypto');
+const BN254_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 const cookieParser = require('cookie-parser');
 const { createPool } = require('./db');
 const { logger } = require('./lib/logger');
+const { verifyWorkoutProof } = require('./lib/zk-verifier');
 const pinoHttp = require('pino-http');
+
+const ZK_CIRCUIT_VERSION = 'workout-validity-v1';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -133,6 +137,69 @@ function hashForPoW(authKeyHash, nonce, solution) {
     .digest('hex');
 }
 
+function hashToField(value) {
+  const digest = createHash('sha256').update(value).digest();
+  let number = 0n;
+  for (const byte of digest) number = (number << 8n) | BigInt(byte);
+  return (number % BN254_FIELD).toString();
+}
+
+function isFieldElement(value) {
+  return typeof value === 'string' && value.length > 0 && [...value].every((char) => char >= '0' && char <= '9') && BigInt(value) < BN254_FIELD;
+}
+
+function decodeBase64(value) {
+  if (typeof value !== 'string' || value.length === 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return null;
+  const decoded = Buffer.from(value, 'base64');
+  return decoded.toString('base64') === value ? decoded : null;
+}
+
+function isEncodedKey(value, byteLength) {
+  const decoded = decodeBase64(value);
+  return Boolean(decoded && decoded.length === byteLength);
+}
+
+function isGroth16Proof(proof) {
+  const point = (value, length) => Array.isArray(value)
+    && value.length === length
+    && value.every(isFieldElement);
+  return Boolean(
+    proof
+    && typeof proof === 'object'
+    && proof.protocol === 'groth16'
+    && proof.curve === 'bn128'
+    && point(proof.pi_a, 3)
+    && Array.isArray(proof.pi_b)
+    && proof.pi_b.length === 3
+    && point(proof.pi_b[0], 2)
+    && point(proof.pi_b[1], 2)
+    && point(proof.pi_b[2], 2)
+    && point(proof.pi_c, 3),
+  );
+}
+
+function canonicalUint(value, maximum) {
+  const stringValue = typeof value === 'number' && Number.isSafeInteger(value)
+    ? String(value)
+    : value;
+  if (typeof stringValue !== 'string' || stringValue.length === 0 || ![...stringValue].every((char) => char >= '0' && char <= '9')) return null;
+  const number = BigInt(stringValue);
+  return number <= BigInt(maximum) ? number.toString() : null;
+}
+
+function isEncryptedBlob(value) {
+  if (typeof value !== 'string' || value.length > 2_000_000) return false;
+  let envelope;
+  try {
+    envelope = JSON.parse(value);
+  } catch {
+    return false;
+  }
+  const iv = decodeBase64(envelope?.iv);
+  const ciphertext = decodeBase64(envelope?.ciphertext);
+  return Boolean(iv && iv.length === 12 && ciphertext && ciphertext.length >= 16);
+}
+
 function countLeadingZeroBits(hex) {
   let bits = 0;
   for (let i = 0; i < hex.length; i++) {
@@ -217,8 +284,8 @@ function setAuthCookie(res, token) {
   const crossOrigin = isCrossOrigin();
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: crossOrigin || !IS_DEV,
-    sameSite: crossOrigin ? 'none' : 'strict',
+    secure: !IS_DEV,
+    sameSite: crossOrigin ? (IS_DEV ? 'lax' : 'none') : 'strict',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
   });
@@ -305,23 +372,26 @@ app.get('/api/auth/challenge', authLimiter, (req, res) => {
 
 /**
  * POST /api/auth/register
- * Body: { username, dsaPublicKey, kemPublicKey, challenge, solution, website }
+ * Body: { username, dsaPublicKey, kemPublicKey, identityCommitment, challenge, solution, website }
  */
 app.post('/api/auth/register', registerLimiter, authLimiter, usernameAuthLimiter, async (req, res, next) => {
   try {
     await pqcReady;
-    const { username, dsaPublicKey, kemPublicKey, challenge, solution, website } = req.body;
-    if (!username || !dsaPublicKey || !kemPublicKey) {
-      return res.status(400).json({ error: 'username, dsaPublicKey, and kemPublicKey are required' });
+    const { username, dsaPublicKey, kemPublicKey, identityCommitment, challenge, solution, website } = req.body;
+    if (!username || !dsaPublicKey || !kemPublicKey || !identityCommitment) {
+      return res.status(400).json({ error: 'username, dsaPublicKey, kemPublicKey, and identityCommitment are required' });
     }
     if (typeof username !== 'string' || username.length < 3 || username.length > 32) {
       return res.status(400).json({ error: 'username must be 3-32 characters' });
     }
-    if (typeof dsaPublicKey !== 'string' || dsaPublicKey.length < 64 || dsaPublicKey.length > 8192) {
+    if (!isEncodedKey(dsaPublicKey, 1952)) {
       return res.status(400).json({ error: 'Invalid dsaPublicKey' });
     }
-    if (typeof kemPublicKey !== 'string' || kemPublicKey.length < 64 || kemPublicKey.length > 8192) {
+    if (!isEncodedKey(kemPublicKey, 1184)) {
       return res.status(400).json({ error: 'Invalid kemPublicKey' });
+    }
+    if (!isFieldElement(identityCommitment)) {
+      return res.status(400).json({ error: 'Invalid identityCommitment' });
     }
 
     if (website && typeof website === 'string' && website.length > 0) {
@@ -342,13 +412,13 @@ app.post('/api/auth/register', registerLimiter, authLimiter, usernameAuthLimiter
     challenges.delete(challenge);
 
     const result = await pool.query(
-      'INSERT INTO users (username, dsa_public_key, kem_public_key) VALUES ($1, $2, $3) RETURNING id',
-      [username, dsaPublicKey, kemPublicKey]
+      'INSERT INTO users (username, dsa_public_key, kem_public_key, identity_commitment) VALUES ($1, $2, $3, $4) RETURNING id',
+      [username, dsaPublicKey, kemPublicKey, identityCommitment]
     );
 
     const token = generateToken(result.rows[0].id);
     setAuthCookie(res, token);
-    res.status(201).json({ message: 'User created', username });
+    res.status(201).json({ message: 'User created', username, identityCommitment });
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'Username already exists' });
@@ -374,7 +444,7 @@ app.post('/api/auth/login', authLimiter, usernameAuthLimiter, async (req, res, n
       return res.status(423).json({ error: 'Account temporarily locked due to failed login attempts. Try again later.' });
     }
 
-    const result = await pool.query('SELECT id, dsa_public_key FROM users WHERE username = $1', [username]);
+    const result = await pool.query('SELECT id, dsa_public_key, identity_commitment FROM users WHERE username = $1', [username]);
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -405,6 +475,9 @@ app.post('/api/auth/login', authLimiter, usernameAuthLimiter, async (req, res, n
     } catch {
       return res.status(400).json({ error: 'Invalid signature or key encoding' });
     }
+    if (sigBytes.length !== 3309 || pubBytes.length !== 1952) {
+      return res.status(400).json({ error: 'Invalid signature or key encoding' });
+    }
 
     const valid = ml_dsa65.verify(sigBytes, nonceBytes, pubBytes);
     if (!valid) {
@@ -417,7 +490,7 @@ app.post('/api/auth/login', authLimiter, usernameAuthLimiter, async (req, res, n
 
     const token = generateToken(user.id);
     setAuthCookie(res, token);
-    res.json({ message: 'Authenticated', username });
+    res.json({ message: 'Authenticated', username, identityCommitment: user.identity_commitment });
   } catch (err) {
     next(err);
   }
@@ -436,29 +509,35 @@ app.post('/api/auth/logout', authenticate, async (req, res) => {
  */
 app.get('/api/auth/session', authenticate, async (req, res) => {
   const result = await pool.query(
-    'SELECT username FROM users WHERE id = $1', [req.userId]);
+    'SELECT username, identity_commitment FROM users WHERE id = $1', [req.userId]);
   if (result.rows.length === 0) {
     clearAuthCookie(res);
     return res.status(401).json({ error: 'User not found' });
   }
-  res.json({ username: result.rows[0].username });
+  res.json({ username: result.rows[0].username, identityCommitment: result.rows[0].identity_commitment });
 });
 
 // ─── Sync ─────────────────────────────────────────────────────────────────────
 app.get('/api/sync', authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
-      'SELECT encrypted_blob, kem_ciphertext, updated_at FROM sync_data WHERE user_id = $1',
+      'SELECT encrypted_blob, kem_ciphertext, proof, public_signals, commitment, nullifier, payload_binding, circuit_version, updated_at FROM sync_data WHERE user_id = $1',
       [req.userId]
     );
     if (result.rows.length === 0) {
-      return res.json({ exists: false, encryptedBlob: null, kemCiphertext: null, updatedAt: null });
+      return res.json({ exists: false, encryptedBlob: null, kemCiphertext: null, proof: null, publicSignals: null, commitment: null, nullifier: null, payloadBinding: null, circuitVersion: null, updatedAt: null });
     }
     const row = result.rows[0];
     res.json({
       exists: true,
       encryptedBlob: row.encrypted_blob,
       kemCiphertext: row.kem_ciphertext,
+      proof: row.proof,
+      publicSignals: row.public_signals,
+      commitment: row.commitment,
+      nullifier: row.nullifier,
+      payloadBinding: row.payload_binding,
+      circuitVersion: row.circuit_version,
       updatedAt: row.updated_at,
     });
   } catch (err) {
@@ -468,23 +547,93 @@ app.get('/api/sync', authenticate, async (req, res, next) => {
 
 app.put('/api/sync', authenticate, async (req, res, next) => {
   try {
-    const { encryptedBlob, kemCiphertext } = req.body;
-    if (!encryptedBlob || typeof encryptedBlob !== 'string' || !kemCiphertext || typeof kemCiphertext !== 'string') {
-      return res.status(400).json({ error: 'encryptedBlob and kemCiphertext are required' });
+    const {
+      encryptedBlob,
+      kemCiphertext,
+      proof,
+      publicSignals,
+      commitment,
+      nullifier,
+      payloadBinding,
+      identityCommitment,
+      circuitVersion,
+    } = req.body;
+    if (!isEncryptedBlob(encryptedBlob)) {
+      return res.status(400).json({ error: 'encryptedBlob must be a valid AES-GCM envelope' });
     }
-    if (encryptedBlob.length > 2_000_000 || kemCiphertext.length > 8192) {
+    const kemBytes = decodeBase64(kemCiphertext);
+    if (!kemBytes || kemBytes.length !== 1088) {
+      return res.status(400).json({ error: 'kemCiphertext must be a valid ML-KEM-768 ciphertext encoding' });
+    }
+    if (!isGroth16Proof(proof) || !Array.isArray(publicSignals) || publicSignals.length !== 6
+      || !publicSignals.every(isFieldElement)) {
+      return res.status(400).json({ error: 'A valid workout proof and public signals are required' });
+    }
+    const minWorkoutCount = canonicalUint(req.body.minWorkoutCount ?? '0', 65534);
+    const minMinutes = canonicalUint(req.body.minMinutes ?? '0', 4294967294);
+    if (minWorkoutCount === null || minMinutes === null) {
+      return res.status(400).json({ error: 'Proof thresholds are outside the supported range' });
+    }
+    if (!isFieldElement(commitment) || !isFieldElement(nullifier)
+      || !isFieldElement(payloadBinding) || !isFieldElement(identityCommitment)
+      || circuitVersion !== ZK_CIRCUIT_VERSION) {
+      return res.status(400).json({ error: 'Proof metadata is incomplete or uses an unsupported circuit' });
+    }
+    if (JSON.stringify(proof).length > 100_000) {
       return res.status(400).json({ error: 'Payload too large' });
     }
 
-    await pool.query(
-      `INSERT INTO sync_data (user_id, encrypted_blob, kem_ciphertext, updated_at)
-       VALUES ($1, $2, $3, NOW())
-       ON CONFLICT (user_id)
-       DO UPDATE SET encrypted_blob = EXCLUDED.encrypted_blob, kem_ciphertext = EXCLUDED.kem_ciphertext, updated_at = EXCLUDED.updated_at`,
-      [req.userId, encryptedBlob, kemCiphertext]
-    );
+    const userResult = await pool.query('SELECT identity_commitment FROM users WHERE id = $1', [req.userId]);
+    if (userResult.rows.length === 0 || userResult.rows[0].identity_commitment !== identityCommitment) {
+      return res.status(403).json({ error: 'Proof identity does not match the authenticated account' });
+    }
+    const expectedPayloadBinding = hashToField(JSON.stringify({ encryptedBlob, kemCiphertext }));
+    if (payloadBinding !== expectedPayloadBinding) {
+      return res.status(400).json({ error: 'Proof payload binding does not match the encrypted payload' });
+    }
+    const expectedSignals = [identityCommitment, commitment, nullifier, payloadBinding, String(minWorkoutCount), String(minMinutes)];
+    if (publicSignals.map(String).some((signal, index) => signal !== expectedSignals[index])) {
+      return res.status(400).json({ error: 'Proof public signals do not match the submitted metadata' });
+    }
+    if (!(await verifyWorkoutProof(proof, publicSignals))) {
+      return res.status(400).json({ error: 'Workout proof verification failed' });
+    }
 
-    res.json({ message: 'Sync data stored' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const spent = await client.query(
+        'SELECT 1 FROM zk_nullifiers WHERE user_id = $1 AND nullifier = $2 FOR UPDATE',
+        [req.userId, nullifier],
+      );
+      if (spent.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'This proof has already been submitted' });
+      }
+      await client.query(
+        `INSERT INTO sync_data (user_id, encrypted_blob, kem_ciphertext, proof, public_signals, commitment, nullifier, payload_binding, circuit_version, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+         ON CONFLICT (user_id)
+         DO UPDATE SET encrypted_blob = EXCLUDED.encrypted_blob, kem_ciphertext = EXCLUDED.kem_ciphertext,
+           proof = EXCLUDED.proof, public_signals = EXCLUDED.public_signals, commitment = EXCLUDED.commitment,
+           nullifier = EXCLUDED.nullifier, payload_binding = EXCLUDED.payload_binding,
+           circuit_version = EXCLUDED.circuit_version, updated_at = EXCLUDED.updated_at`,
+        [req.userId, encryptedBlob, kemCiphertext, JSON.stringify(proof), JSON.stringify(publicSignals), commitment, nullifier, payloadBinding, circuitVersion],
+      );
+      await client.query(
+        'INSERT INTO zk_nullifiers (user_id, nullifier, commitment) VALUES ($1, $2, $3)',
+        [req.userId, nullifier, commitment],
+      );
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      if (err.code === '23505') return res.status(409).json({ error: 'This proof has already been submitted' });
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    res.json({ message: 'Encrypted state and verified proof stored', commitment, nullifier });
   } catch (err) {
     next(err);
   }

@@ -6,11 +6,16 @@
  */
 
 const { createHash } = require('crypto');
+const path = require('path');
+const snarkjs = require('snarkjs');
+const BN254_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 const request = require('supertest');
+const { buildPoseidonReference } = require('circomlibjs');
 
 let ml_dsa65;
 let ml_kem768;
 let pqcReady;
+let poseidonPromise;
 
 function loadPqc() {
   if (pqcReady) return pqcReady;
@@ -77,6 +82,85 @@ async function generateTestKeyPair() {
   };
 }
 
+async function poseidonHash(values) {
+  poseidonPromise ??= buildPoseidonReference();
+  const poseidon = await poseidonPromise;
+  return poseidon.F.toString(poseidon(values));
+}
+
+function hashToField(value) {
+  const digest = createHash('sha256').update(value).digest();
+  let number = 0n;
+  for (const byte of digest) number = (number << 8n) | BigInt(byte);
+  return (number % BN254_FIELD).toString();
+}
+
+async function identitySecretFor(keyPair) {
+  const digest = createHash('sha256')
+    .update(JSON.stringify(Array.from(new Uint8Array(keyPair.dsaKeyPair.secretKey))))
+    .digest();
+  let number = 0n;
+  for (const byte of digest) number = (number << 8n) | BigInt(byte);
+  return (number % BN254_FIELD).toString();
+}
+
+async function identityCommitmentFor(keyPair) {
+  return poseidonHash([await identitySecretFor(keyPair)]);
+}
+
+async function createProofPayload(keyPair, encryptedBlob, options = {}) {
+  const secret = await identitySecretFor(keyPair);
+  const workoutCount = String(options.workoutCount ?? 2);
+  const totalMinutes = String(options.totalMinutes ?? 30);
+  const totalDistance = String(options.totalDistance ?? 10);
+  const minWorkoutCount = String(options.minWorkoutCount ?? 1);
+  const minMinutes = String(options.minMinutes ?? 1);
+  const kemCiphertext = Buffer.alloc(1088, 7).toString('base64');
+  const validEncryptedBlob = encryptedBlob || JSON.stringify({
+    iv: Buffer.alloc(12, 1).toString('base64'),
+    ciphertext: Buffer.alloc(16, 2).toString('base64'),
+  });
+  const payloadBinding = hashToField(JSON.stringify({ encryptedBlob: validEncryptedBlob, kemCiphertext }));
+  const workoutHash = await poseidonHash([workoutCount, totalMinutes, totalDistance]);
+  const identityCommitment = await poseidonHash([secret]);
+  const nonce = String(options.nonce ?? 67890);
+  const commitment = await poseidonHash([secret, nonce, workoutHash, payloadBinding]);
+  const nullifier = await poseidonHash([secret, nonce]);
+  const input = {
+    secret,
+    nonce,
+    workoutCount,
+    totalMinutes,
+    totalDistance,
+    workoutHash,
+    identityCommitment,
+    commitment,
+    nullifier,
+    payloadBinding,
+    minWorkoutCount,
+    minMinutes,
+  };
+  const root = path.join(__dirname, '..', '..');
+  const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+    input,
+    path.join(root, 'zk', 'circuits', 'main_js', 'main.wasm'),
+    path.join(root, 'zk', 'circuits', 'main.zkey'),
+  );
+  return {
+    encryptedBlob: validEncryptedBlob,
+    kemCiphertext,
+    proof,
+    publicSignals,
+    commitment,
+    nullifier,
+    payloadBinding,
+    identityCommitment,
+    minWorkoutCount,
+    minMinutes,
+    circuitVersion: 'workout-validity-v1',
+  };
+}
+
 function getCookie(res) {
   const cookies = res.headers['set-cookie'];
   if (!cookies || cookies.length === 0) return null;
@@ -86,6 +170,8 @@ function getCookie(res) {
 async function registerUser(app, username, keyPair) {
   const challengeRes = await request(app).get('/api/auth/challenge').expect(200);
   const solution = solvePoW(keyPair.dsaPublicKey, challengeRes.body.nonce, challengeRes.body.difficulty);
+  const identityCommitment = await identityCommitmentFor(keyPair);
+  keyPair.identityCommitment = identityCommitment;
   const res = await request(app)
     .post('/api/auth/register')
     .set('Origin', process.env.CLIENT_ORIGIN)
@@ -93,6 +179,7 @@ async function registerUser(app, username, keyPair) {
       username,
       dsaPublicKey: keyPair.dsaPublicKey,
       kemPublicKey: keyPair.kemPublicKey,
+      identityCommitment,
       challenge: challengeRes.body.nonce,
       solution,
     })
@@ -136,4 +223,7 @@ module.exports = {
   registerUser,
   loginUser,
   registerAndLogin,
+  identityCommitmentFor,
+  poseidonHash,
+  createProofPayload,
 };

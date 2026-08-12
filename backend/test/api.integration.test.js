@@ -5,10 +5,11 @@ const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const request = require('supertest');
 const { app, pool } = require('../server');
-const { generateTestKeyPair, registerAndLogin } = require('./helpers');
+const { generateTestKeyPair, registerAndLogin, createProofPayload } = require('./helpers');
 
 const TEST_USER = 'inttestuser';
 let cookie;
+let keyPair;
 
 before(async () => {
   await pool.query(`
@@ -21,7 +22,7 @@ before(async () => {
     )
   `);
   await cleanupUser();
-  ({ cookie } = await registerAndLogin(app, TEST_USER));
+  ({ cookie, keyPair } = await registerAndLogin(app, TEST_USER));
 });
 
 after(async () => {
@@ -98,6 +99,7 @@ describe('Registration validation', () => {
         username: 'badchallengeuser',
         dsaPublicKey: kp.dsaPublicKey,
         kemPublicKey: kp.kemPublicKey,
+        identityCommitment: '1',
         challenge: challengeRes.body.nonce,
         solution: 1,
       })
@@ -115,14 +117,18 @@ describe('Sync lifecycle', () => {
   });
 
   it('stores encrypted data and returns it on subsequent requests', async () => {
-    const blob = JSON.stringify({ iv: 'abc', ciphertext: 'xyz', version: 2 });
-    const kemCiphertext = 'integration-kem-ciphertext';
+    const blob = JSON.stringify({
+      iv: Buffer.alloc(12, 1).toString('base64'),
+      ciphertext: Buffer.alloc(16, 2).toString('base64'),
+      version: 2,
+    });
+    const payload = await createProofPayload(keyPair, blob, { nonce: 90001 });
 
     await request(app)
       .put('/api/sync')
       .set('Origin', process.env.CLIENT_ORIGIN)
       .set('Cookie', cookie)
-      .send({ encryptedBlob: blob, kemCiphertext })
+      .send(payload)
       .expect(200);
 
     const res = await request(app)
@@ -131,18 +137,22 @@ describe('Sync lifecycle', () => {
       .expect(200);
     assert.equal(res.body.exists, true);
     assert.equal(res.body.encryptedBlob, blob);
-    assert.equal(res.body.kemCiphertext, kemCiphertext);
+    assert.equal(res.body.kemCiphertext, Buffer.alloc(1088, 7).toString('base64'));
+    assert.equal(res.body.publicSignals.length, 6);
   });
 
   it('overwrites previous sync data', async () => {
-    const blob = JSON.stringify({ iv: 'updated', ciphertext: 'updated-payload' });
-    const kemCiphertext = 'updated-kem';
+    const blob = JSON.stringify({
+      iv: Buffer.alloc(12, 3).toString('base64'),
+      ciphertext: Buffer.alloc(16, 4).toString('base64'),
+    });
+    const payload = await createProofPayload(keyPair, blob, { nonce: 90002 });
 
     await request(app)
       .put('/api/sync')
       .set('Origin', process.env.CLIENT_ORIGIN)
       .set('Cookie', cookie)
-      .send({ encryptedBlob: blob, kemCiphertext })
+      .send(payload)
       .expect(200);
 
     const res = await request(app)
@@ -159,6 +169,36 @@ describe('Sync lifecycle', () => {
       .set('Origin', process.env.CLIENT_ORIGIN)
       .set('Cookie', cookie)
       .send({ encryptedBlob: hugeBlob, kemCiphertext: 'x' })
+      .expect(400);
+  });
+
+  it('rejects a replayed proof and a mutated public signal', async () => {
+    const blob = JSON.stringify({
+      iv: Buffer.alloc(12, 5).toString('base64'),
+      ciphertext: Buffer.alloc(16, 6).toString('base64'),
+    });
+    const payload = await createProofPayload(keyPair, blob, { nonce: 90003 });
+    await request(app)
+      .put('/api/sync')
+      .set('Origin', process.env.CLIENT_ORIGIN)
+      .set('Cookie', cookie)
+      .send(payload)
+      .expect(200);
+
+    await request(app)
+      .put('/api/sync')
+      .set('Origin', process.env.CLIENT_ORIGIN)
+      .set('Cookie', cookie)
+      .send(payload)
+      .expect(409);
+
+    const mutated = { ...payload, publicSignals: [...payload.publicSignals] };
+    mutated.publicSignals[0] = '0';
+    await request(app)
+      .put('/api/sync')
+      .set('Origin', process.env.CLIENT_ORIGIN)
+      .set('Cookie', cookie)
+      .send(mutated)
       .expect(400);
   });
 

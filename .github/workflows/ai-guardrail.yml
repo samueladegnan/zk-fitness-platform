@@ -40,9 +40,7 @@ jobs:
           cd ../frontend && npm ci
 
       - name: Run npm audit
-        run: |
-          cd backend && npm audit --audit-level=moderate || true
-          cd ../frontend && npm audit --audit-level=moderate || true
+        run: python3 scripts/run-audit.py
 
       - name: Generate ESLint SARIF report (backend)
         id: eslint-backend

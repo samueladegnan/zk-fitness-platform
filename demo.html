@@ -3,8 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZK Fitness | Live Demo</title>
-  <meta name="description" content="Try the ZK Fitness zero-knowledge workout tracker on your device or run it locally." />
+  <title>ZK Fitness | Demo and Local Setup</title>
+  <meta name="description" content="Try the ZK Fitness browser app without an account or run the API and PostgreSQL stack locally." />
+  <meta name="author" content="Samuel Degnan" />
+  <meta name="robots" content="index,follow" />
+  <link rel="canonical" href="https://samueladegnan.github.io/zk-fitness-platform/demo/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="ZK Fitness | Demo and Local Setup" />
+  <meta property="og:description" content="Try local mode in the browser or run the optional API and PostgreSQL sync path locally." />
+  <meta property="og:url" content="https://samueladegnan.github.io/zk-fitness-platform/demo/" />
+  <meta name="twitter:card" content="summary" />
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
   <link rel="stylesheet" href="./assets/css/style.css" />
 </head>
@@ -13,61 +21,72 @@
   <nav class="site-nav" aria-label="Primary">
     <div class="site-nav-identity">
       <a class="site-nav-brand" href="./" aria-label="ZK Fitness overview">ZK Fitness</a>
-      <span class="site-nav-tagline">A privacy-first workout tracker with a client-owned security boundary.</span>
+      <span class="site-nav-tagline">A workout tracker with a client-owned encryption boundary.</span>
     </div>
     <ul class="site-nav-links">
-      <li><a href="https://samueladegnan.github.io/">&larr; Back to Portfolio</a></li>
+      <li><a href="https://samueladegnan.github.io/">&larr; Portfolio</a></li>
       <li><a href="./">Overview</a></li>
-      <li><a class="active" href="./demo.html" aria-current="page">Live Demo</a></li>
+      <li><a class="active" href="./demo.html" aria-current="page">Demo</a></li>
       <li><a href="./architecture.html">Architecture</a></li>
-      <li><a href="./guardrail.html">Security Report</a></li>
-      <li>
-        <a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform" aria-label="View source on GitHub">GitHub</a>
-      </li>
-      <li><a class="btn" href="./frontend/">Launch Live Demo</a></li>
+      <li><a href="./guardrail.html">Security report</a></li>
+      <li><a class="site-nav-github" href="https://github.com/samueladegnan/zk-fitness-platform">Source</a></li>
+      <li><a class="btn" href="./frontend/">Try the app</a></li>
     </ul>
   </nav>
 
   <main id="main-content" class="main-content">
-    <h2>Try the hosted app</h2>
+    <h1>Try the working app</h1>
     <div class="demo-cta">
       <div>
         <p class="demo-cta__eyebrow">Hosted on GitHub Pages</p>
-        <p class="demo-cta__copy">Open the working app and choose <strong>Try without an account</strong>. The local trial keeps your workout record in this browser, so there is no signup step before you can test the product.</p>
+        <p class="demo-cta__copy">Open the app and choose <strong>Try without an account</strong>. Local mode gives you the product flow without a signup step. The record stays in this browser.</p>
       </div>
-      <a class="btn" href="./frontend/">Open Hosted Demo</a>
+      <a class="btn" href="./frontend/">Open the app</a>
     </div>
-    <p>When the API is configured, cloud sync sends encrypted state rather than readable workout records.</p>
 
-    <h2>Run It Locally</h2>
-    <p>To run the project on your own machine:</p>
-    <pre><code># 1. Clone the repository
-git clone https://github.com/samueladegnan/zk-fitness-platform.git
-cd zk-fitness-platform
-
-# 2. Install backend dependencies and start the database
-npm run install:backend
-npm run dev:infra
-
-# 3. Run migrations and start the API
-npm run migrate
-npm start
-
-# 4. Serve the frontend (in a new terminal)
-npx serve frontend -l 3001</code></pre>
-
-    <h2>Suggested walkthrough</h2>
+    <h2>What to look for</h2>
     <ol>
       <li>Choose <strong>Try without an account</strong> to open local mode.</li>
       <li>Start an empty workout and add a strength or cardio exercise.</li>
-      <li>Open an exercise card to inspect records, charts, and the one-rep-max estimate, then add it to the current workout.</li>
-      <li>Create a plan, add exercises from search, and check that the editor resumes where you left it.</li>
+      <li>Open an exercise card to inspect records, charts, and the one-rep-max estimate.</li>
+      <li>Create a plan, add an exercise from search, and confirm that the editor returns to the plan.</li>
+      <li>Open the local mode explanation to see what the demonstration key does and does not protect.</li>
     </ol>
+
+    <h2>Run the full stack locally</h2>
+    <p>Local mode does not need the backend. Account mode and cloud sync do. Use Docker for PostgreSQL, then run the API and frontend in separate terminals.</p>
+    <pre><code>git clone https://github.com/samueladegnan/zk-fitness-platform.git
+cd zk-fitness-platform
+npm ci
+npm run install:frontend
+npm run install:backend
+cp backend/.env.example backend/.env
+npm run dev:infra
+npm run migrate
+npm run dev:api</code></pre>
+
+    <p>In a second terminal:</p>
+    <pre><code>npm run dev:client</code></pre>
+
+    <p>Open <a href="http://localhost:3001">http://localhost:3001</a>. The API listens on <a href="http://localhost:3000/api/health">http://localhost:3000/api/health</a>.</p>
+
+    <h2>Run the checks</h2>
+    <pre><code>npm run lint
+npm run test:unit
+npm run test:integration
+npm run test:e2e
+npm run security:audit
+npm run security:secrets
+npm run build:pages</code></pre>
+    <p>See the complete <a href="https://github.com/samueladegnan/zk-fitness-platform/blob/main/docs/TESTING.md">test instructions</a> for scope and known gaps.</p>
+
+    <h2>Source and architecture</h2>
+    <p>Read the <a href="./architecture.html">architecture notes</a>, inspect the <a href="https://github.com/samueladegnan/zk-fitness-platform">source repository</a>, or return to the <a href="./">project overview</a>.</p>
   </main>
 
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p class="site-footer__tagline">A privacy-first workout tracker with a client-owned security boundary.</p>
+      <p class="site-footer__tagline">A workout tracker with a client-owned encryption boundary.</p>
       <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </div>
   </footer>

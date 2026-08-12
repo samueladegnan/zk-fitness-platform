@@ -1,10 +1,12 @@
 process.env.NODE_ENV ??= 'test';
+process.env.CLIENT_ORIGIN ??= 'http://localhost:3001';
 
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const request = require('supertest');
 const { createHash } = require('crypto');
 const { app, pool } = require('../server');
+const { identityCommitmentFor, createProofPayload } = require('./helpers');
 
 after(async () => {
   await pool.end();
@@ -95,12 +97,16 @@ describe('Auth endpoints', () => {
   it('registers a new user', async () => {
     const challengeRes = await request(app).get('/api/auth/challenge').expect(200);
     const solution = solvePoW(testKeyPair.dsaPublicKey, challengeRes.body.nonce, challengeRes.body.difficulty);
-    const res = await request(app)
+    const identityCommitment = await identityCommitmentFor(testKeyPair);
+    testKeyPair.identityCommitment = identityCommitment;
+    const res =    await request(app)
       .post('/api/auth/register')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .send({
         username: TEST_USER,
         dsaPublicKey: testKeyPair.dsaPublicKey,
         kemPublicKey: testKeyPair.kemPublicKey,
+        identityCommitment,
         challenge: challengeRes.body.nonce,
         solution,
       })
@@ -112,12 +118,15 @@ describe('Auth endpoints', () => {
   it('rejects duplicate username', async () => {
     const challengeRes = await request(app).get('/api/auth/challenge').expect(200);
     const solution = solvePoW(testKeyPair.dsaPublicKey, challengeRes.body.nonce, challengeRes.body.difficulty);
+    const identityCommitment = await identityCommitmentFor(testKeyPair);
     await request(app)
       .post('/api/auth/register')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .send({
         username: TEST_USER,
         dsaPublicKey: testKeyPair.dsaPublicKey,
         kemPublicKey: testKeyPair.kemPublicKey,
+        identityCommitment,
         challenge: challengeRes.body.nonce,
         solution,
       })
@@ -127,6 +136,7 @@ describe('Auth endpoints', () => {
   it('logs in an existing user', async () => {
     const nonceRes = await request(app)
       .post('/api/auth/login')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .send({ username: TEST_USER })
       .expect(200);
     assert.ok(nonceRes.body.nonce);
@@ -134,6 +144,7 @@ describe('Auth endpoints', () => {
     const signature = await signNonce(nonceRes.body.nonce, testKeyPair.dsaKeyPair.secretKey);
     const loginRes = await request(app)
       .post('/api/auth/login')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .send({
         username: TEST_USER,
         signature: arrayBufferToBase64(signature),
@@ -146,11 +157,13 @@ describe('Auth endpoints', () => {
   it('rejects invalid credentials', async () => {
     await request(app)
       .post('/api/auth/login')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .send({ username: TEST_USER })
       .expect(200);
     const badSignature = new Uint8Array(ml_dsa65.lengths.signature).fill(0);
     await request(app)
       .post('/api/auth/login')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .send({
         username: TEST_USER,
         signature: arrayBufferToBase64(badSignature),
@@ -178,12 +191,16 @@ describe('Sync endpoints', () => {
 
     const challengeRes = await request(app).get('/api/auth/challenge').expect(200);
     const solution = solvePoW(testKeyPair.dsaPublicKey, challengeRes.body.nonce, challengeRes.body.difficulty);
-    const registerRes = await request(app)
+    const identityCommitment = await identityCommitmentFor(testKeyPair);
+    testKeyPair.identityCommitment = identityCommitment;
+    const registerRes =    await request(app)
       .post('/api/auth/register')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .send({
         username: TEST_USER,
         dsaPublicKey: testKeyPair.dsaPublicKey,
         kemPublicKey: testKeyPair.kemPublicKey,
+        identityCommitment,
         challenge: challengeRes.body.nonce,
         solution,
       })
@@ -192,11 +209,13 @@ describe('Sync endpoints', () => {
 
     const nonceRes = await request(app)
       .post('/api/auth/login')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .send({ username: TEST_USER })
       .expect(200);
     const signature = await signNonce(nonceRes.body.nonce, testKeyPair.dsaKeyPair.secretKey);
     const loginRes = await request(app)
       .post('/api/auth/login')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .send({
         username: TEST_USER,
         signature: arrayBufferToBase64(signature),
@@ -221,12 +240,16 @@ describe('Sync endpoints', () => {
   });
 
   it('stores and retrieves encrypted data', async () => {
-    const blob = JSON.stringify({ iv: 'abc', ciphertext: 'xyz' });
-    const kemCiphertext = 'demo-kem-ciphertext';
+    const blob = JSON.stringify({
+      iv: Buffer.alloc(12, 1).toString('base64'),
+      ciphertext: Buffer.alloc(16, 2).toString('base64'),
+    });
+    const payload = await createProofPayload(testKeyPair, blob, { nonce: 67890 });
     await request(app)
       .put('/api/sync')
+      .set('Origin', process.env.CLIENT_ORIGIN)
       .set('Cookie', cookie)
-      .send({ encryptedBlob: blob, kemCiphertext })
+      .send(payload)
       .expect(200);
 
     const res = await request(app)
@@ -235,7 +258,8 @@ describe('Sync endpoints', () => {
       .expect(200);
     assert.equal(res.body.exists, true);
     assert.equal(res.body.encryptedBlob, blob);
-    assert.equal(res.body.kemCiphertext, kemCiphertext);
+    assert.equal(res.body.kemCiphertext, Buffer.alloc(1088, 7).toString('base64'));
+    assert.equal(res.body.publicSignals.length, 6);
   });
 
   it('rejects unauthenticated sync access', async () => {

@@ -1,8 +1,8 @@
 /**
  * ZK Fitness - Local IndexedDB persistence.
  *
- * Stores only encrypted blobs (and the optional KEM ciphertext) so the local
- * database remains zero-knowledge: the plaintext never touches disk.
+ * Stores only encrypted blobs and the optional KEM ciphertext so plaintext
+ * workout state does not touch disk through this persistence layer.
  */
 
 const DB_NAME = 'zkfitness-db';

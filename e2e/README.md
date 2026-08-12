@@ -1,18 +1,24 @@
-# ZK Fitness - End-to-End Tests
+# ZK Fitness browser tests
 
-This directory contains Playwright-based end-to-end tests for the local-trial workout flow.
+This directory contains Playwright tests for the local trial workflow. They cover starting local mode, creating an empty workout, adding an exercise from the exercise menu, adding an exercise from an exercise detail card, and returning to a plan editor.
+
+They do not cover every browser, account flow, sync failure, corrupted ciphertext, wrong key, expired session, missing key, or two-browser cross-device scenario.
 
 ## Run
 
-```bash
-# Install Playwright and browsers (one-time)
-npm install
-npx playwright install
+From the repository root:
 
-# Run e2e tests (starts the frontend dev server automatically)
+```bash
+npm ci
+npm run install:frontend
+npx playwright install chromium
 npm run test:e2e
 ```
 
-Tests run against the frontend served at `http://localhost:3001`.
-Set `ZK_E2E_BASE_URL` to point to a different URL, or set it before running
-`npx playwright test` directly.
+The test runner starts the frontend server at `http://localhost:3001` automatically. To use an existing server:
+
+```bash
+ZK_E2E_BASE_URL=http://localhost:3001 npm run test:e2e
+```
+
+See [the full test instructions](../docs/TESTING.md) for unit tests, integration tests, lint, security checks, Docker, CI mapping, and the scenario matrix.

@@ -24,6 +24,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Build browser ZK assets
+        run: |
+          npm run zk:build
+          npm run zk:verify
+          npm run zk:build:browser
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

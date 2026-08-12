@@ -3,8 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>ZK Fitness - Zero-Knowledge Workout Tracker</title>
-  <meta name="description" content="A privacy-first strength and cardio tracker with browser-side encryption, offline support, and optional encrypted sync." />
+  <title>ZK Fitness | Private Workout Tracking in Your Browser</title>
+  <meta name="description" content="Log strength and cardio workouts locally in your browser, or use optional encrypted sync with a Node.js API." />
+  <meta name="author" content="Samuel Degnan" />
+  <meta name="theme-color" content="#1e3a8a" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="ZK Fitness | Private Workout Tracking in Your Browser" />
+  <meta property="og:description" content="A browser-first workout tracker with IndexedDB persistence and optional encrypted sync." />
+  <meta property="og:url" content="https://samueladegnan.github.io/zk-fitness-platform/frontend/" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="ZK Fitness | Private Workout Tracking in Your Browser" />
+  <meta name="twitter:description" content="Log workouts locally or connect the optional encrypted sync backend." />
+  <link rel="canonical" href="https://samueladegnan.github.io/zk-fitness-platform/frontend/" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="ZK Fitness" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -44,8 +54,8 @@
       <!-- Auth view -->
       <section id="auth-view" class="view">
         <div class="auth-card">
-          <h1>Privacy-First Strength Training</h1>
-          <p class="subtitle">Your workout log is encrypted on your device. No one else can read it, not even us.</p>
+          <h1>Private Workout Tracking</h1>
+          <p class="subtitle">Readable workout state stays in this browser. Optional account mode encrypts the payload before sync.</p>
           <form id="auth-form">
             <label for="username">Username</label>
             <input id="username" name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" />
@@ -59,7 +69,7 @@
             </div>
             <div class="local-actions">
               <button type="button" id="local-trial-btn" class="secondary">👋 Try without an account</button>
-              <p class="muted small">No account needed. Your data stays on your device, so you can try everything right now.</p>
+              <p class="muted small">No account needed. Local mode keeps the demo self-contained in this browser.</p>
             </div>
             <p id="auth-error" class="error" role="status"></p>
           </form>
@@ -182,7 +192,7 @@
       <div class="modal-content install-help-content">
         <h2 id="install-help-title">Install ZK Fitness</h2>
         <p>On iPhone or iPad, open this site in Safari, tap <strong>Share</strong>, choose <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.</p>
-        <p class="muted">iOS does not expose a native web install prompt. Once added, ZK Fitness opens in its own app-style window and keeps its local data available offline.</p>
+        <p class="muted">iOS does not expose a native web install prompt. Once added, ZK Fitness opens in its own app-style window and keeps its static shell available offline. Account sync still needs the API connection.</p>
         <div class="modal-actions">
           <button id="install-help-close" type="button">Done</button>
         </div>
@@ -192,12 +202,12 @@
     <!-- Local Mode Security Modal -->
     <div id="local-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="local-modal-title">
       <div class="modal-content">
-        <h2 id="local-modal-title">Your data stays yours</h2>
-        <p>Workouts are encrypted in the browser before they are stored. The server cannot read cloud-synced workouts.</p>
+        <h2 id="local-modal-title">Understand local mode</h2>
+        <p>Local mode encrypts the IndexedDB record before storage so the storage shape matches the account path.</p>
         <ul>
-          <li>In account mode, your password derives the client keys. Your password and private keys do not leave this device.</li>
+          <li>Account mode derives client key material from your password. The password and private keys are not sent to the API.</li>
           <li>Cloud sync sends public key material and encrypted payloads, not readable workouts.</li>
-          <li>Local trial mode encrypts its IndexedDB record to demonstrate the storage boundary. It is not a replacement for device security because the demo key is available to the app.</li>
+          <li>Local trial mode uses a fixed demonstration key. It protects against casual storage inspection, but code running in this same origin can access the key.</li>
           <li>The browser, device, password, dependencies, and deployment configuration remain part of the trust model.</li>
         </ul>
         <div class="modal-actions">
