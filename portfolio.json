@@ -3,7 +3,7 @@
   "slug": "zk-fitness-platform",
   "category": "Privacy engineering",
   "title": "Zero-Knowledge Fitness Platform",
-  "summary": "A browser-first fitness platform that keeps readable workout state and private keys on the client while supporting proof-carrying encrypted sync.",
+  "summary": "A privacy-first fitness platform that keeps workout state and private keys on the client while supporting proof-carrying encrypted sync.",
   "notes": [
     [
       "Build",

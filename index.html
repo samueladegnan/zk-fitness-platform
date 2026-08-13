@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ZK Fitness | Client-Owned Workout Data</title>
-  <meta name="description" content="A full-stack strength and cardio tracker that keeps readable workout state in the browser and syncs encrypted payloads through an optional Node.js API." />
+  <meta name="description" content="A privacy-first strength and cardio tracker with a client-owned security boundary and optional encrypted sync through a Node.js API." />
   <meta name="author" content="Samuel Degnan" />
   <meta name="theme-color" content="#0b3027" />
   <meta name="robots" content="index,follow" />
@@ -31,7 +31,7 @@
     "@context": "https://schema.org",
     "@type": "SoftwareSourceCode",
     "name": "ZK Fitness",
-    "description": "A full-stack strength and cardio tracker with browser-owned plaintext state and optional encrypted sync.",
+    "description": "A privacy-first strength and cardio tracker with a client-owned security boundary and optional encrypted sync.",
     "codeRepository": "https://github.com/samueladegnan/zk-fitness-platform",
     "url": "https://samueladegnan.github.io/zk-fitness-platform/",
     "mainEntityOfPage": "https://samueladegnan.github.io/zk-fitness-platform/",
@@ -73,7 +73,7 @@
       <a href="https://github.com/samueladegnan/zk-fitness-platform/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT license" /></a>
     </p>
 
-    <h1>Workout data stays readable in the browser</h1>
+    <h1>Privacy-first workout tracking with a client-owned security boundary</h1>
     <p><strong>ZK Fitness</strong> is a full-stack strength and cardio tracker built around a clear boundary. The browser owns plaintext workout state, private keys, and analytics. The optional API receives public key material and opaque encrypted payloads.</p>
 
     <h2>What is implemented</h2>
@@ -89,7 +89,7 @@
     <p>The server is responsible for sessions, validation, rate limits, health checks, proof verification, replay checks, and storage. It does not receive the password, private keys, or readable workout state. The client decrypts state before calculating fitness analytics. The proof verifies a declared private summary and its binding to the encrypted record metadata. It does not prove the AES-GCM or ML-KEM internals or that the ciphertext decrypts to that summary.</p>
     <p>Post-quantum algorithms are included as an engineering exploration. A fitness app does not commercially require them by default. They make the project a useful place to study larger keys, challenge-response authentication, key encapsulation, and browser performance tradeoffs.</p>
 
-    <h2>Be precise about the scope</h2>
+    <h2>Scope</h2>
     <p>This repository includes automated unit, backend integration, browser flow, ZK artifact self-test, lint, Docker build, dependency audit, secret-pattern, and guardrail checks. The browser suite focuses on local trial workflows. It does not prove coverage across every browser and failure mode, an independent security assessment, or operational reliability.</p>
 
     <p><strong>Ownership:</strong> I own the architecture, implementation, testing, security model, and final code for this project.</p>
