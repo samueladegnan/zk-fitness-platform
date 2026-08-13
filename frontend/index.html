@@ -6,6 +6,7 @@
   <title>ZK Fitness | Private Workout Tracking in Your Browser</title>
   <meta name="description" content="Log strength and cardio workouts locally in your browser, or use optional encrypted sync with a Node.js API." />
   <meta name="author" content="Samuel Degnan" />
+  <meta name="robots" content="index,follow" />
   <meta name="theme-color" content="#1e3a8a" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="ZK Fitness | Private Workout Tracking in Your Browser" />
@@ -14,14 +15,43 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="ZK Fitness | Private Workout Tracking in Your Browser" />
   <meta name="twitter:description" content="Log workouts locally or connect the optional encrypted sync backend." />
+  <meta name="twitter:url" content="https://samueladegnan.github.io/zk-fitness-platform/frontend/" />
+  <meta name="twitter:image" content="https://samueladegnan.github.io/zk-fitness-platform/frontend/icon-512.png" />
+  <meta property="og:site_name" content="Samuel Degnan Portfolio" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:image" content="https://samueladegnan.github.io/zk-fitness-platform/frontend/icon-512.png" />
+  <meta property="og:image:alt" content="ZK Fitness shield and barbell logo" />
+  <meta property="og:image:width" content="512" />
+  <meta property="og:image:height" content="512" />
   <link rel="canonical" href="https://samueladegnan.github.io/zk-fitness-platform/frontend/" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="ZK Fitness" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="app-icon.svg" />
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#1e3a8a" />
   <link rel="apple-touch-icon" href="icon-192.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "ZK Fitness",
+    "alternateName": "ZK Fitness workout tracker",
+    "description": "A browser-first strength and cardio tracker with IndexedDB persistence and optional encrypted sync.",
+    "url": "https://samueladegnan.github.io/zk-fitness-platform/frontend/",
+    "applicationCategory": "HealthApplication",
+    "operatingSystem": "Any",
+    "browserRequirements": "Requires a modern browser with IndexedDB and Web Crypto support",
+    "image": "https://samueladegnan.github.io/zk-fitness-platform/frontend/icon-512.png",
+    "author": { "@type": "Person", "name": "Samuel Degnan", "url": "https://samueladegnan.github.io/" },
+    "featureList": [
+      "Strength and cardio workout logging",
+      "Workout plans and exercise history",
+      "Browser-owned encrypted persistence",
+      "Optional encrypted account sync"
+    ],
+    "isPartOf": { "@type": "WebSite", "name": "ZK Fitness", "url": "https://samueladegnan.github.io/zk-fitness-platform/" }
+  }
+  </script>
   <link rel="stylesheet" href="styles.css" />
   <script src="config.js"></script>
   <script defer src="install.js"></script>

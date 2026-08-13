@@ -54,13 +54,15 @@ The migration does not silently delete legacy users or sync records. If an exist
 
 ## Render and managed PostgreSQL
 
-`render.yaml` provides a Render Blueprint for the backend. You still need to choose a PostgreSQL provider and supply its connection string.
+`render.yaml` provides a Render Blueprint for the backend and its PostgreSQL database. The service is pinned to `main`, waits for CI checks, runs migrations in Render's pre-deploy phase, and exposes `/api/health` as its health check.
 
-1. Create a PostgreSQL database and copy its connection string.
-2. Create a Render Blueprint from this repository and the `main` branch.
-3. Add `DATABASE_URL`, `JWT_SECRET`, and `CLIENT_ORIGIN` in the service environment.
+1. Create a Render Blueprint from this repository and the `main` branch.
+2. Accept the generated `JWT_SECRET` and the managed Postgres connection exposed by the Blueprint.
+3. Confirm `CLIENT_ORIGIN` is `https://samueladegnan.github.io`.
 4. Use the service health check at `/api/health` after deployment.
 5. Confirm the service URL and cookie behavior before pointing a hosted frontend at it.
+
+The default Pages build uses `https://zk-fitness-api.onrender.com/api`. Set the `ZK_API_BASE` Actions repository variable if the service uses a different public URL.
 
 For a GitHub Pages deployment, `CLIENT_ORIGIN` should be the origin only, such as:
 
@@ -84,7 +86,7 @@ The Pages workflow injects the API base URL into the generated `frontend/config.
 
 4. Run the Pages workflow again or push a change to `main`.
 
-If the variable is not set, the generated frontend uses the local development default `http://localhost:3000/api`.
+If the variable is not set, the generated frontend uses the default Render service URL above.
 
 ## Cookies and cross-origin requests
 

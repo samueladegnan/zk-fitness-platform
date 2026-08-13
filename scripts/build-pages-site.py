@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SITE_DIR = Path('site')
+PUBLIC_ORIGIN = 'https://samueladegnan.github.io/zk-fitness-platform'
 PAGES = ['index', 'demo', 'architecture', 'security']
 PUBLIC_ROUTES = {
     'demo': './demo/',
@@ -53,7 +54,28 @@ def rewrite_subpage(content: str) -> str:
     return content.replace('href="./"', 'href="../"')
 
 
-def build(api_base: str = 'http://localhost:3000/api') -> None:
+def write_search_files() -> None:
+    """Write crawler directives for the generated GitHub Pages artifact."""
+    (SITE_DIR / 'robots.txt').write_text(
+        f'User-agent: *\nAllow: /\nSitemap: {PUBLIC_ORIGIN}/sitemap.xml\n',
+        encoding='utf-8',
+    )
+
+    routes = ['', 'demo/', 'architecture/', 'security/', 'frontend/']
+    urls = '\n'.join(
+        f'  <url><loc>{PUBLIC_ORIGIN}/{route}</loc></url>'
+        for route in routes
+    )
+    sitemap = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f'{urls}\n'
+        '</urlset>\n'
+    )
+    (SITE_DIR / 'sitemap.xml').write_text(sitemap, encoding='utf-8')
+
+
+def build(api_base: str = 'https://zk-fitness-api.onrender.com/api') -> None:
     if SITE_DIR.exists():
         shutil.rmtree(SITE_DIR)
     SITE_DIR.mkdir(parents=True)
@@ -93,8 +115,9 @@ def build(api_base: str = 'http://localhost:3000/api') -> None:
         f"window.ZK_API_BASE = '{api_base}';",
     )
     config_path.write_text(config, encoding='utf-8')
+    write_search_files()
 
 
 if __name__ == '__main__':
-    api_base = os.environ.get('ZK_API_BASE', 'http://localhost:3000/api')
+    api_base = os.environ.get('ZK_API_BASE', 'https://zk-fitness-api.onrender.com/api')
     build(api_base)

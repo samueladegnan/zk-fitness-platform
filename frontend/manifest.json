@@ -1,15 +1,16 @@
 {
-  "id": "zk-fitness",
+  "id": "./",
   "lang": "en",
   "name": "ZK Fitness",
   "short_name": "ZK Fitness",
   "description": "Privacy-first strength and cardio tracker with browser-owned workout state and optional encrypted sync.",
-  "start_url": "./index.html",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#eff6ff",
   "theme_color": "#1e3a8a",
   "orientation": "portrait-primary",
   "scope": "./",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "icon-192.png",

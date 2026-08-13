@@ -44,9 +44,34 @@ jobs:
 
       - name: Prepare static site
         env:
-          ZK_API_BASE: ${{ vars.ZK_API_BASE || secrets.ZK_API_BASE || 'http://localhost:3000/api' }}
+          ZK_API_BASE: ${{ vars.ZK_API_BASE || secrets.ZK_API_BASE || 'https://zk-fitness-api.onrender.com/api' }}
         run: |
           python3 scripts/build-pages-site.py
+
+      - name: Validate SEO artifact
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          required_files = ('site/robots.txt', 'site/sitemap.xml', 'site/index.html', 'site/frontend/index.html')
+          for filename in required_files:
+              path = Path(filename)
+              if not path.is_file() or not path.stat().st_size:
+                  raise SystemExit(f'Missing SEO artifact: {filename}')
+
+          ET.parse('site/sitemap.xml')
+          robots = Path('site/robots.txt').read_text(encoding='utf-8')
+          if 'Sitemap: https://samueladegnan.github.io/zk-fitness-platform/sitemap.xml' not in robots:
+              raise SystemExit('robots.txt does not reference the canonical sitemap')
+
+          for filename in ('site/index.html', 'site/demo/index.html', 'site/architecture/index.html', 'site/security/index.html', 'site/frontend/index.html'):
+              html = Path(filename).read_text(encoding='utf-8')
+              for marker in ('rel="canonical"', 'application/ld+json', 'og:image'):
+                  if marker not in html:
+                      raise SystemExit(f'{filename} is missing {marker}')
+          print('SEO artifact validation passed')
+          PY
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

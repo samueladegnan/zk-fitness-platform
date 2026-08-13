@@ -1,25 +1,38 @@
 # Render Blueprint for the ZK Fitness backend.
 #
-# This deploys the Node.js/Express API from the backend/ directory.
-# After the service is created, set these environment variables in the Render
-# dashboard:
+# This deploys the Node.js API and the PostgreSQL database it needs from the
+# main branch. Render generates the JWT secret during initial setup.
 #
-#   DATABASE_URL   - Postgres connection string (e.g. from Neon)
-#   JWT_SECRET     - A strong random secret (>= 32 chars)
-#   CLIENT_ORIGIN  - Your GitHub Pages origin, e.g. https://<username>.github.io
-#
+# CLIENT_ORIGIN is the origin only. The repository path does not belong in it.
 services:
   - type: web
     name: zk-fitness-api
     runtime: node
     plan: free
     region: oregon
+    branch: main
+    autoDeployTrigger: checksPass
     rootDir: backend
     buildCommand: npm ci
-    startCommand: npm run start:prod
+    preDeployCommand: npm run migrate
+    startCommand: npm start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
         value: 20
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zk-fitness-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_ORIGIN
+        value: https://samueladegnan.github.io
+
+databases:
+  - name: zk-fitness-db
+    plan: free
+    region: oregon
+    postgresMajorVersion: '16'
