@@ -238,6 +238,8 @@ ZK Fitness is one of three portfolio projects focused on practical engineering b
 - [SEEO AWS Orchestrator](https://samueladegnan.github.io/seeo-aws-orchestrator/)
 - [AI CI/CD Security Guardrail](https://samueladegnan.github.io/ai-cicd-security-guardrail/)
 
+The root [`portfolio.json`](portfolio.json) file keeps the project description, scope notes, evidence, and technology list aligned with the description card on the main portfolio.
+
 ## License
 
 MIT © Samuel Degnan

@@ -14,8 +14,9 @@ services:
     autoDeployTrigger: checksPass
     rootDir: backend
     buildCommand: npm ci
-    preDeployCommand: npm run migrate
-    startCommand: npm start
+    # Free web services do not support pre-deploy commands. Run the migration
+    # during startup before the API begins accepting traffic.
+    startCommand: npm run start:prod
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV

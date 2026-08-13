@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "slug": "zk-fitness-platform",
+  "category": "Privacy engineering",
+  "title": "Zero-Knowledge Fitness Platform",
+  "summary": "A browser-first fitness platform that keeps readable workout state and private keys on the client while supporting proof-carrying encrypted sync.",
+  "notes": [
+    [
+      "Build",
+      "A buildless PWA with IndexedDB persistence, browser cryptography, post-quantum authentication, encrypted sync, and a Node.js API backed by PostgreSQL."
+    ],
+    [
+      "Boundary",
+      "A scoped Groth16 proof verifies a private workout summary and its binding to the encrypted record. It does not prove the encryption internals or decrypt the payload."
+    ]
+  ],
+  "proofLabel": "Evidence",
+  "proof": "Local-first workflows, AES-256-GCM, Argon2id, ML-KEM-768, ML-DSA-65, Circom, Groth16, Poseidon, Docker, CI checks, and an automated security report.",
+  "stack": [
+    "Vanilla JavaScript",
+    "PWA",
+    "IndexedDB",
+    "Web Crypto API",
+    "Argon2id",
+    "HKDF",
+    "AES-256-GCM",
+    "ML-KEM-768",
+    "ML-DSA-65",
+    "Circom",
+    "Groth16",
+    "Poseidon",
+    "Node.js",
+    "Express",
+    "PostgreSQL"
+  ]
+}

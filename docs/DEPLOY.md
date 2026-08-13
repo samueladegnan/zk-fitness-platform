@@ -54,13 +54,14 @@ The migration does not silently delete legacy users or sync records. If an exist
 
 ## Render and managed PostgreSQL
 
-`render.yaml` provides a Render Blueprint for the backend and its PostgreSQL database. The service is pinned to `main`, waits for CI checks, runs migrations in Render's pre-deploy phase, and exposes `/api/health` as its health check.
+`render.yaml` provides a Render Blueprint for the backend and its PostgreSQL database. The service is pinned to `main`, waits for CI checks, runs migrations during its production startup command, and exposes `/api/health` as its health check. Running the migration at startup keeps the Blueprint compatible with Render's free web service plan, which does not provide pre-deploy commands.
 
 1. Create a Render Blueprint from this repository and the `main` branch.
 2. Accept the generated `JWT_SECRET` and the managed Postgres connection exposed by the Blueprint.
 3. Confirm `CLIENT_ORIGIN` is `https://samueladegnan.github.io`.
-4. Use the service health check at `/api/health` after deployment.
-5. Confirm the service URL and cookie behavior before pointing a hosted frontend at it.
+4. Confirm the service uses `npm run start:prod`, which applies the migration before starting the API.
+5. Use the service health check at `/api/health` after deployment.
+6. Confirm the service URL and cookie behavior before pointing a hosted frontend at it.
 
 The default Pages build uses `https://zk-fitness-api.onrender.com/api`. Set the `ZK_API_BASE` Actions repository variable if the service uses a different public URL.
 
