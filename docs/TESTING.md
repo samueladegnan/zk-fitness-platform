@@ -21,7 +21,7 @@ npm run zk:verify
 npm run zk:build:browser
 ```
 
-The self-test checks the six public signals and verifies a proof. It does not prove that an encrypted blob decrypts to the private summary, and it does not cover AES-GCM or ML-KEM internals. The local build script uses a deterministic development contribution so CI can reproduce the artifact. That is not a multi-party trusted setup and is not evidence for a production ceremony.
+The self-test checks the six public signals and verifies a proof. It does not prove that an encrypted blob decrypts to the sensitive workout summary, and it does not cover AES-GCM or ML-KEM internals. The local build script uses a deterministic development contribution so CI can reproduce the artifact. That is not a multi-party trusted setup and is not evidence for a production ceremony.
 
 ## Unit tests
 

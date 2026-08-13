@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZK Fitness | Client-Owned Workout Data</title>
-  <meta name="description" content="A privacy-first strength and cardio tracker with a client-owned security boundary and optional encrypted sync through a Node.js API." />
+  <title>ZK Fitness | Protecting Sensitive Health Information</title>
+  <meta name="description" content="A privacy-first fitness platform designed to keep sensitive health and fitness information in the browser, with optional encrypted sync through a Node.js API." />
   <meta name="author" content="Samuel Degnan" />
   <meta name="theme-color" content="#0b3027" />
   <meta name="robots" content="index,follow" />
   <link rel="canonical" href="https://samueladegnan.github.io/zk-fitness-platform/" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="ZK Fitness | Client-Owned Workout Data" />
-  <meta property="og:description" content="A full-stack workout tracker with browser-owned plaintext state, encrypted sync, IndexedDB persistence, and an optional PostgreSQL backend." />
+  <meta property="og:title" content="ZK Fitness | Protecting Sensitive Health Information" />
+  <meta property="og:description" content="A full-stack fitness platform that keeps sensitive health and fitness information in the browser, with encrypted sync, IndexedDB persistence, and an optional PostgreSQL backend." />
   <meta property="og:url" content="https://samueladegnan.github.io/zk-fitness-platform/" />
   <meta property="og:site_name" content="Samuel Degnan Portfolio" />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="ZK Fitness | Client-Owned Workout Data" />
-  <meta name="twitter:description" content="A privacy-first full-stack fitness tracker built around a client-owned encryption boundary." />
+  <meta name="twitter:title" content="ZK Fitness | Protecting Sensitive Health Information" />
+  <meta name="twitter:description" content="A privacy-first fitness platform built around a client-owned encryption boundary for sensitive health and fitness information." />
   <meta name="twitter:url" content="https://samueladegnan.github.io/zk-fitness-platform/" />
   <meta name="twitter:image" content="https://samueladegnan.github.io/zk-fitness-platform/frontend/icon-512.png" />
   <meta property="og:locale" content="en_US" />
@@ -31,7 +31,7 @@
     "@context": "https://schema.org",
     "@type": "SoftwareSourceCode",
     "name": "ZK Fitness",
-    "description": "A privacy-first strength and cardio tracker with a client-owned security boundary and optional encrypted sync.",
+    "description": "A privacy-first fitness platform designed to keep sensitive health and fitness information in the browser with optional encrypted sync.",
     "codeRepository": "https://github.com/samueladegnan/zk-fitness-platform",
     "url": "https://samueladegnan.github.io/zk-fitness-platform/",
     "mainEntityOfPage": "https://samueladegnan.github.io/zk-fitness-platform/",
@@ -52,7 +52,7 @@
   <nav class="site-nav" aria-label="Primary">
     <div class="site-nav-identity">
       <a class="site-nav-brand" href="./" aria-label="ZK Fitness overview">ZK Fitness</a>
-      <span class="site-nav-tagline">A workout tracker with a client-owned encryption boundary.</span>
+      <span class="site-nav-tagline">Protecting sensitive health information with a client-owned encryption boundary.</span>
     </div>
     <ul class="site-nav-links">
       <li><a href="https://samueladegnan.github.io/">&larr; Portfolio</a></li>
@@ -73,8 +73,8 @@
       <a href="https://github.com/samueladegnan/zk-fitness-platform/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT license" /></a>
     </p>
 
-    <h1>Privacy-first workout tracking with a client-owned security boundary</h1>
-    <p><strong>ZK Fitness</strong> is a full-stack strength and cardio tracker built around a clear boundary. The browser owns plaintext workout state, private keys, and analytics. The optional API receives public key material and opaque encrypted payloads.</p>
+    <h1>Protecting sensitive health information with a client-owned security boundary</h1>
+    <p><strong>ZK Fitness</strong> is a full-stack fitness platform built around a clear privacy boundary. The browser owns readable workout records, private keys, and analytics. Workout history can reveal sensitive health and lifestyle information, so the optional API receives public key material and opaque encrypted payloads instead of readable records.</p>
 
     <h2>What is implemented</h2>
     <ul>
@@ -86,7 +86,7 @@
     </ul>
 
     <h2>How I approached it</h2>
-    <p>The server is responsible for sessions, validation, rate limits, health checks, proof verification, replay checks, and storage. It does not receive the password, private keys, or readable workout state. The client decrypts state before calculating fitness analytics. The proof verifies a declared private summary and its binding to the encrypted record metadata. It does not prove the AES-GCM or ML-KEM internals or that the ciphertext decrypts to that summary.</p>
+    <p>The server is responsible for sessions, validation, rate limits, health checks, proof verification, replay checks, and storage. It does not receive the password, private keys, or readable workout records. The client decrypts the record before calculating analytics. The proof verifies a declared sensitive workout summary and its binding to the encrypted record metadata. It does not prove the AES-GCM or ML-KEM internals or that the ciphertext decrypts to that summary.</p>
     <p>Post-quantum algorithms are included as an engineering exploration. A fitness app does not commercially require them by default. They make the project a useful place to study larger keys, challenge-response authentication, key encapsulation, and browser performance tradeoffs.</p>
 
     <h2>Scope</h2>
@@ -101,7 +101,7 @@
 
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p class="site-footer__tagline">A workout tracker with a client-owned encryption boundary.</p>
+      <p class="site-footer__tagline">Protecting sensitive health information with a client-owned encryption boundary.</p>
       <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </div>
   </footer>

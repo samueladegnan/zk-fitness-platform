@@ -3,7 +3,7 @@
   "slug": "zk-fitness-platform",
   "category": "Privacy engineering",
   "title": "Zero-Knowledge Fitness Platform",
-  "summary": "A privacy-first fitness platform that keeps workout state and private keys on the client while supporting proof-carrying encrypted sync.",
+  "summary": "A privacy-first fitness platform that keeps sensitive workout records and cryptographic key material on the client while supporting proof-carrying encrypted sync.",
   "notes": [
     [
       "Build",
@@ -11,7 +11,7 @@
     ],
     [
       "Boundary",
-      "A scoped Groth16 proof verifies a private workout summary and its binding to the encrypted record. It does not prove the encryption internals or decrypt the payload."
+      "A scoped Groth16 proof verifies a sensitive workout summary and its binding to the encrypted record. It does not prove the encryption internals or decrypt the payload."
     ]
   ],
   "proofLabel": "Evidence",

@@ -2,7 +2,7 @@
 
 **Live demo:** [Open ZK Fitness](https://samueladegnan.github.io/zk-fitness-platform/)
 
-ZK Fitness is a privacy-first strength and cardio tracker. The browser keeps readable workout state and performs analytics locally. Optional cloud sync sends public key material and encrypted payloads to a Node.js API. PostgreSQL stores the payload without a server-side workout model.
+ZK Fitness is a privacy-first strength and cardio tracker. Workout history can contain sensitive health and lifestyle information. The browser keeps readable records and performs analytics locally. Optional cloud sync sends public key material and encrypted payloads to a Node.js API. PostgreSQL stores the payload without a server-side workout model.
 
 This is a portfolio project. It demonstrates a client-owned encryption boundary and a full-stack product path. It is not presented as a formally audited security product or as evidence of operational reliability.
 
@@ -23,9 +23,9 @@ This is a portfolio project. It demonstrates a client-owned encryption boundary 
 
 ## Why I built it
 
-Workout history is personal data. I built this project to explore what changes when the client owns the readable record and the server stores only an encrypted representation. The fitness features provide a realistic workload for that boundary. The project also gave me a place to work through browser cryptography, offline persistence, authentication, API design, PostgreSQL, Docker, and CI.
+Workout history can reveal sensitive health and lifestyle information. I built this project to explore what changes when the client owns the readable record and the server stores only an encrypted representation. The fitness features provide a realistic workload for that privacy boundary. The project also gave me a place to work through browser cryptography, offline persistence, authentication, API design, PostgreSQL, Docker, and CI.
 
-The project name uses “ZK” because account sync now includes a Groth16 proof checked by the API. This is a scoped proof-carrying sync experiment, not a claim that the entire fitness application is a formally verified zero-knowledge vault. The proof covers knowledge of a private workout summary, a private identity secret, a commitment, a one-time nullifier, minimum thresholds, and a binding to the submitted encrypted record. It does not prove AES-GCM or ML-KEM internals, and it does not prove that the ciphertext decrypts to the private summary. The precise scope is a proof-carrying sync protocol layered on a client-owned encryption boundary.
+The project name uses “ZK” because account sync now includes a Groth16 proof checked by the API. This is a scoped proof-carrying sync experiment, not a claim that the entire fitness application is a formally verified zero-knowledge vault. The proof covers knowledge of a sensitive workout summary, an identity secret, a commitment, a one-time nullifier, minimum thresholds, and a binding to the submitted encrypted record. It does not prove AES-GCM or ML-KEM internals, and it does not prove that the ciphertext decrypts to the sensitive workout summary. The precise scope is a proof-carrying sync protocol layered on a client-owned encryption boundary.
 
 ## What is implemented
 
@@ -55,7 +55,7 @@ The browser is the plaintext boundary. Local mode uses encrypted storage for the
 ```mermaid
 flowchart LR
   subgraph B[Browser or installed PWA]
-    P[Plaintext workout state]
+    P[Readable workout records]
     K[Private keys in memory]
     A[Browser-side analytics]
     I[(IndexedDB encrypted record)]
@@ -80,7 +80,7 @@ flowchart LR
   E --> O
   O <-->|HTTPS| API
   API --> DB
-  API -. stores no readable workout state .-> DB
+  API -. stores no readable workout records .-> DB
 ```
 
 ### Data flow
@@ -88,13 +88,13 @@ flowchart LR
 1. The user enters a password in the browser.
 2. Argon2id stretches the password. HKDF expands the result into deterministic seeds for the client key pairs.
 3. ML-DSA-65 signs a server-issued login nonce during account login.
-4. The client serializes workout state and encrypts it with AES-256-GCM.
+4. The client serializes workout records and encrypts them with AES-256-GCM.
 5. In account mode, ML-KEM-768 encapsulates a fresh shared secret that becomes the AES data key for that payload.
-6. The browser computes a Poseidon commitment and Groth16 proof over the private summary, identity secret, nonce, thresholds, and a field binding of the encrypted blob plus KEM ciphertext.
+6. The browser computes a Poseidon commitment and Groth16 proof over the sensitive workout summary, identity secret, nonce, thresholds, and a field binding of the encrypted blob plus KEM ciphertext.
 7. IndexedDB stores the encrypted record locally. Optional account sync sends the encrypted record, proof, public signals, and metadata to the API.
-8. The API verifies the proof and rejects a reused nullifier before PostgreSQL stores the opaque values. The client retrieves, decapsulates, decrypts, and analyzes the workout state.
+8. The API verifies the proof and rejects a reused nullifier before PostgreSQL stores the opaque values. The client retrieves, decapsulates, decrypts, and analyzes the workout records.
 
-The boundary limits what the API can learn from the workout payload. It does not protect a compromised browser, a compromised device, a weak or reused password, malicious application code, dependency compromise, traffic metadata, deletion, replay, or loss of availability.
+The boundary limits what the API can learn from the sensitive workout payload. It does not protect a compromised browser, a compromised device, a weak or reused password, malicious application code, dependency compromise, traffic metadata, deletion, replay, or loss of availability.
 
 ## Cryptography decisions
 
@@ -103,8 +103,8 @@ The boundary limits what the API can learn from the workout payload. It does not
 | Password-based key material | Argon2id plus HKDF with SHA-256 | Argon2id makes password guessing more expensive. HKDF separates derived material into stable seeds for the client key pairs. | It does not recover a forgotten password, protect a password entered into a compromised browser, or make a weak password safe. |
 | Login authentication | ML-DSA-65 | The client signs a short server nonce, so the server can verify possession of the private signing key without receiving it. | It does not prove that the device is trusted, prevent account lockout, or provide a recovery path. |
 | Sync data-key encapsulation | ML-KEM-768 | The client creates a fresh shared secret for a payload and sends the KEM ciphertext needed for the client to recover it. | It does not provide availability, conflict resolution, protection from a malicious client, or protection from deletion and replay. |
-| Workout payload confidentiality and integrity | AES-256-GCM | A browser-native authenticated encryption primitive protects the serialized workout state and detects modified ciphertext. | It does not protect plaintext while the application is running or hide all metadata such as timing, size, and account activity. |
-| Workout validity proof | Groth16 over a Circom circuit with Poseidon | The API can verify a private summary, private identity secret, minimum thresholds, commitment, nullifier, and encrypted-record binding without receiving the witness values. | It does not prove AES-GCM or ML-KEM internals, prove that ciphertext decrypts to the summary, or protect a compromised browser. |
+| Workout payload confidentiality and integrity | AES-256-GCM | A browser-native authenticated encryption primitive protects the serialized workout records and detects modified ciphertext. | It does not protect plaintext while the application is running or hide all metadata such as timing, size, and account activity. |
+| Workout validity proof | Groth16 over a Circom circuit with Poseidon | The API can verify a sensitive workout summary, identity secret, minimum thresholds, commitment, nullifier, and encrypted-record binding without receiving the witness values. | It does not prove AES-GCM or ML-KEM internals, prove that ciphertext decrypts to the summary, or protect a compromised browser. |
 | Commitment and nullifier hashing | Poseidon | It is circuit-friendly for identity commitments, state commitments, and replay identifiers. | It does not provide confidentiality by itself or prevent deletion and denial of service. |
 | Registration abuse control | SHA-256 proof of work | The client must solve a small computational challenge before registration. | It is not identity verification, bot prevention at scale, or a substitute for rate limits and monitoring. |
 
@@ -115,7 +115,7 @@ ML-DSA-65 and ML-KEM-768 are an engineering exploration in this portfolio. A fit
 ## What is not implemented
 
 - No independent penetration test, cryptographic review, formal threat-model review, or security certification
-- The ZK circuit proves the declared private summary and its encrypted-record binding. It does not prove the AES-GCM or ML-KEM algorithms, and it does not prove that the ciphertext decrypts to the summary
+- The ZK circuit proves the declared sensitive workout summary and its encrypted-record binding. It does not prove the AES-GCM or ML-KEM algorithms, and it does not prove that the ciphertext decrypts to the summary
 - No claim that the automated tests cover every browser, device, account state, network failure, and recovery path
 - No dedicated automated browser test for expired sessions, missing keys, or IndexedDB recovery. AES-GCM corruption and wrong-key behavior have focused frontend unit coverage
 - No cross-device Playwright scenario. The proof-carrying sync protocol exists, but concurrent editing and conflict resolution are not implemented

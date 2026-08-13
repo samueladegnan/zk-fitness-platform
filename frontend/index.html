@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>ZK Fitness | Private Workout Tracking in Your Browser</title>
-  <meta name="description" content="Log strength and cardio workouts locally in your browser, or use optional encrypted sync with a Node.js API." />
+  <title>ZK Fitness | Workout Tracking with Data You Control</title>
+  <meta name="description" content="Track sensitive workout information in your browser with IndexedDB persistence and optional encrypted sync through a Node.js API." />
   <meta name="author" content="Samuel Degnan" />
   <meta name="robots" content="index,follow" />
   <meta name="theme-color" content="#1e3a8a" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="ZK Fitness | Private Workout Tracking in Your Browser" />
+  <meta property="og:title" content="ZK Fitness | Workout Tracking with Data You Control" />
   <meta property="og:description" content="A browser-first workout tracker with IndexedDB persistence and optional encrypted sync." />
   <meta property="og:url" content="https://samueladegnan.github.io/zk-fitness-platform/frontend/" />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="ZK Fitness | Private Workout Tracking in Your Browser" />
+  <meta name="twitter:title" content="ZK Fitness | Workout Tracking with Data You Control" />
   <meta name="twitter:description" content="Log workouts locally or connect the optional encrypted sync backend." />
   <meta name="twitter:url" content="https://samueladegnan.github.io/zk-fitness-platform/frontend/" />
   <meta name="twitter:image" content="https://samueladegnan.github.io/zk-fitness-platform/frontend/icon-512.png" />
@@ -84,8 +84,8 @@
       <!-- Auth view -->
       <section id="auth-view" class="view">
         <div class="auth-card">
-          <h1>Private Workout Tracking</h1>
-          <p class="subtitle">Readable workout state stays in this browser. Optional account mode encrypts the payload before sync.</p>
+          <h1>Workout Tracking with Data You Control</h1>
+          <p class="subtitle">Your readable workout history stays in this browser. Optional account mode encrypts the record before sync.</p>
           <form id="auth-form">
             <label for="username">Username</label>
             <input id="username" name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" />
@@ -233,10 +233,10 @@
     <div id="local-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="local-modal-title">
       <div class="modal-content">
         <h2 id="local-modal-title">Understand local mode</h2>
-        <p>Local mode encrypts the IndexedDB record before storage so the storage shape matches the account path.</p>
+        <p>Local mode encrypts the workout record before IndexedDB storage so the storage shape matches the account path.</p>
         <ul>
           <li>Account mode derives client key material from your password. The password and private keys are not sent to the API.</li>
-          <li>Cloud sync sends public key material and encrypted payloads, not readable workouts.</li>
+          <li>Cloud sync sends public key material and encrypted payloads, not readable workout records.</li>
           <li>Local trial mode uses a fixed demonstration key. It protects against casual storage inspection, but code running in this same origin can access the key.</li>
           <li>The browser, device, password, dependencies, and deployment configuration remain part of the trust model.</li>
         </ul>

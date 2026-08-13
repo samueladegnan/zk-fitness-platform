@@ -4,10 +4,10 @@ info:
   description: |
     Optional backend for the ZK Fitness platform. The client-owned boundary
     sends public keys, opaque encrypted payloads, and a Groth16 proof over a
-    private workout summary and its encrypted-record binding. The API verifies
+    sensitive workout summary and its encrypted-record binding. The API verifies
     the proof and rejects replayed nullifiers. The circuit does not prove
     AES-GCM or ML-KEM internals, and it does not prove that ciphertext decrypts
-    to the private summary.
+    to the sensitive workout summary.
   version: 1.0.0
   contact:
     name: Samuel Degnan

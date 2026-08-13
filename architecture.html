@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ZK Fitness | Architecture and Cryptography</title>
-  <meta name="description" content="Architecture, trust boundary, cryptography decisions, and limitations for the ZK Fitness portfolio project." />
+  <meta name="description" content="Architecture, trust boundary, cryptography decisions, and limitations for protecting sensitive workout records in ZK Fitness." />
   <meta name="author" content="Samuel Degnan" />
   <meta name="theme-color" content="#0b3027" />
   <meta name="robots" content="index,follow" />
@@ -12,11 +12,11 @@
   <meta property="og:type" content="article" />
   <meta property="og:site_name" content="Samuel Degnan Portfolio" />
   <meta property="og:title" content="ZK Fitness | Architecture and Cryptography" />
-  <meta property="og:description" content="How the browser, IndexedDB, encryption boundary, API sessions, public keys, and PostgreSQL fit together." />
+  <meta property="og:description" content="How the browser, IndexedDB, encryption boundary, API sessions, public keys, and PostgreSQL protect sensitive workout records." />
   <meta property="og:url" content="https://samueladegnan.github.io/zk-fitness-platform/architecture/" />
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="ZK Fitness | Architecture and Cryptography" />
-  <meta name="twitter:description" content="How the browser, IndexedDB, encryption boundary, API sessions, public keys, and PostgreSQL fit together." />
+  <meta name="twitter:description" content="How the browser, IndexedDB, encryption boundary, API sessions, public keys, and PostgreSQL protect sensitive workout records." />
   <meta name="twitter:url" content="https://samueladegnan.github.io/zk-fitness-platform/architecture/" />
   <meta name="twitter:image" content="https://samueladegnan.github.io/zk-fitness-platform/frontend/icon-512.png" />
   <meta property="og:locale" content="en_US" />
@@ -31,7 +31,7 @@
     "@context": "https://schema.org",
     "@type": "TechArticle",
     "headline": "ZK Fitness architecture and cryptography",
-    "description": "Architecture, trust boundary, cryptography decisions, and limitations for ZK Fitness.",
+    "description": "Architecture, trust boundary, cryptography decisions, and limitations for protecting sensitive workout records in ZK Fitness.",
     "url": "https://samueladegnan.github.io/zk-fitness-platform/architecture/",
     "author": { "@type": "Person", "name": "Samuel Degnan", "url": "https://samueladegnan.github.io/" },
     "image": "https://samueladegnan.github.io/zk-fitness-platform/frontend/icon-512.png",
@@ -49,7 +49,7 @@
   <nav class="site-nav" aria-label="Primary">
     <div class="site-nav-identity">
       <a class="site-nav-brand" href="./" aria-label="ZK Fitness overview">ZK Fitness</a>
-      <span class="site-nav-tagline">A workout tracker with a client-owned encryption boundary.</span>
+      <span class="site-nav-tagline">Protecting sensitive health information with a client-owned encryption boundary.</span>
     </div>
     <ul class="site-nav-links">
       <li><a href="https://samueladegnan.github.io/">&larr; Portfolio</a></li>
@@ -64,13 +64,13 @@
 
   <main id="main-content" class="main-content">
     <h1>Architecture and cryptography</h1>
-    <p>The central design decision is simple. The browser owns readable workout state. The API provides optional account sessions, proof verification, and opaque encrypted storage. Local mode works without an account and does not run the account proof flow. The ZK layer is a scoped proof-carrying sync experiment, not a claim that the whole application is formally verified.</p>
+    <p>The central design decision is simple. The browser owns readable workout records. The API provides optional account sessions, proof verification, and opaque encrypted storage. Local mode works without an account and does not run the account proof flow. The ZK layer is a scoped proof-carrying sync experiment, not a claim that the whole application is formally verified.</p>
 
     <h2>System boundary</h2>
     <div class="mermaid">
 flowchart LR
   subgraph B[Browser or installed PWA]
-    P[Browser plaintext state]
+    P[Browser readable workout records]
     K[Private keys in memory]
     I[(IndexedDB encrypted record)]
     E[Encryption boundary<br/>AES-256-GCM]
@@ -93,13 +93,13 @@ flowchart LR
   E --> O
   O <-->|HTTPS| API
   API --> DB
-  API -. no readable workout state .-> DB
+  API -. no readable workout records .-> DB
     </div>
     <details>
       <summary>Accessible text version</summary>
-      <p>Plaintext workout state, private keys, public key material, analytics, proof generation, and the encryption boundary are in the browser. IndexedDB stores an encrypted record. An optional HTTP-only JWT session connects the browser to the Node.js and Express API. The API verifies proof metadata, stores a nullifier, and stores opaque encrypted payloads in PostgreSQL without receiving readable workout state.</p>
+      <p>Readable workout records, private keys, public key material, analytics, proof generation, and the encryption boundary are in the browser. IndexedDB stores an encrypted record. An optional HTTP-only JWT session connects the browser to the Node.js and Express API. The API verifies proof metadata, stores a nullifier, and stores opaque encrypted payloads in PostgreSQL without receiving readable workout records.</p>
     </details>
-    <pre><code>Browser plaintext state
+    <pre><code>Browser readable workout records
   ├─ private keys and public key material
   ├─ browser-side analytics
   ├─ AES-256-GCM encryption boundary
@@ -110,16 +110,16 @@ flowchart LR
                  │
                  ▼
        PostgreSQL opaque payloads</code></pre>
-    <p>The service worker caches static application assets for offline startup. It does not intercept API requests. IndexedDB stores the encrypted blob and the optional KEM ciphertext, not the parsed workout object.</p>
+    <p>The service worker caches static application assets for offline startup. It does not intercept API requests. IndexedDB stores the encrypted blob and the optional KEM ciphertext, not the parsed workout record.</p>
 
     <h2>Data flow</h2>
     <ol>
       <li>The user enters a password in the browser during account registration or login.</li>
       <li>Argon2id stretches the password. HKDF expands the result into deterministic seeds for the ML-DSA and ML-KEM key pairs.</li>
       <li>The server issues a login nonce. The client signs it with ML-DSA-65. The API returns an HTTP-only JWT session cookie after verification.</li>
-      <li>The client serializes workout state and encrypts it with AES-256-GCM using a random 12-byte IV.</li>
+      <li>The client serializes workout records and encrypts them with AES-256-GCM using a random 12-byte IV.</li>
       <li>In account mode, ML-KEM-768 encapsulates a fresh shared secret that becomes the AES data key for the payload.</li>
-      <li>The browser computes a Groth16 proof over the private workout summary, identity secret, state nonce, thresholds, and a field binding of the encrypted blob plus KEM ciphertext.</li>
+      <li>The browser computes a Groth16 proof over the sensitive workout summary, identity secret, state nonce, thresholds, and a field binding of the encrypted blob plus KEM ciphertext.</li>
       <li>The browser stores the encrypted record locally and can send it with the proof and public signals to the API for optional account sync.</li>
       <li>The API verifies the proof, checks the identity commitment, rejects a reused nullifier, and then PostgreSQL stores the opaque values.</li>
       <li>On retrieval, the client decapsulates and decrypts the payload before calculating analytics.</li>
@@ -157,20 +157,20 @@ flowchart LR
         <tr>
           <td>Workout validity proof</td>
           <td>Groth16, Circom, and Poseidon</td>
-          <td>Lets the API verify private summary rules, identity knowledge, commitments, nullifiers, and an encrypted-record binding.</td>
+          <td>Lets the API verify sensitive workout summary rules, identity knowledge, commitments, nullifiers, and an encrypted-record binding.</td>
           <td>It does not prove AES-GCM or ML-KEM internals, prove that ciphertext decrypts to the summary, or protect a compromised browser.</td>
         </tr>
         <tr>
           <td>Payload confidentiality and integrity</td>
           <td>AES-256-GCM</td>
-          <td>Encrypts serialized workout state and detects modified ciphertext.</td>
+          <td>Encrypts serialized workout records and detects modified ciphertext.</td>
           <td>It does not protect plaintext while the app is running or hide all metadata.</td>
         </tr>
       </tbody>
     </table>
 
     <h2>Why post-quantum cryptography is included</h2>
-    <p>ML-DSA-65 and ML-KEM-768 are an engineering exploration, not a claim that a fitness app commercially requires post-quantum algorithms. Groth16 and Poseidon are also used as a scoped proof experiment. The proof does not cover AES-GCM or ML-KEM internals, and it does not prove that the ciphertext decrypts to the private summary. This project does not claim an independent cryptographic audit or a guarantee against every future threat.</p>
+    <p>ML-DSA-65 and ML-KEM-768 are an engineering exploration, not a claim that a fitness app commercially requires post-quantum algorithms. Groth16 and Poseidon are also used as a scoped proof experiment. The proof does not cover AES-GCM or ML-KEM internals, and it does not prove that the ciphertext decrypts to the sensitive workout summary. This project does not claim an independent cryptographic audit or a guarantee against every future threat.</p>
 
     <h2>What is not implemented</h2>
     <ul>
@@ -191,7 +191,7 @@ flowchart LR
 
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p class="site-footer__tagline">A workout tracker with a client-owned encryption boundary.</p>
+      <p class="site-footer__tagline">Protecting sensitive health information with a client-owned encryption boundary.</p>
       <p class="site-footer__copyright">&copy; 2026 <a href="https://samueladegnan.github.io/">Samuel Degnan</a></p>
     </div>
   </footer>

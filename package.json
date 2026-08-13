@@ -1,7 +1,7 @@
 {
   "name": "zk-fitness-platform",
   "version": "1.0.0",
-  "description": "Privacy-first strength and cardio tracker with a client-owned encryption boundary.",
+  "description": "Privacy-first workout tracker with a client-owned encryption boundary for sensitive health information.",
   "scripts": {
     "start": "cd backend && npm start",
     "dev": "cd backend && npm run dev",
