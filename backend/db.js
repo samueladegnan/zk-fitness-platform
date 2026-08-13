@@ -22,12 +22,11 @@ function normalizeDatabaseUrl(urlString) {
     );
   }
 
-  const sslMode = url.searchParams.get('sslmode');
-  if (sslMode && ['prefer', 'require', 'verify-ca'].includes(sslMode)) {
-    // pg currently treats the above modes as verify-full. In pg v9 they will
-    // switch to standard libpq semantics and emit a deprecation warning unless
-    // the mode is explicit. Keep current (strict) behavior and silence the warning.
-    url.searchParams.set('sslmode', 'verify-full');
+  // node-postgres replaces the explicit `ssl` object when the connection string
+  // contains sslmode, sslcert, sslkey, or sslrootcert. Strip those parameters
+  // so the caller can control certificate verification deliberately.
+  for (const parameter of ['sslmode', 'sslcert', 'sslkey', 'sslrootcert']) {
+    url.searchParams.delete(parameter);
   }
 
   return url.toString();
@@ -49,9 +48,12 @@ function createPool() {
     return new Pool({
       ...baseConfig,
       connectionString,
-      // Managed Postgres providers (e.g. Neon) require TLS. Local/dev URLs
-      // such as localhost/127.0.0.1 do not.
-      ssl: isLocal ? undefined : true,
+      // Managed Postgres providers require TLS. Render uses a managed
+      // self-signed certificate, so its Blueprint explicitly opts out of
+      // certificate verification while retaining encryption in transit.
+      ssl: isLocal
+        ? undefined
+        : { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' },
     });
   }
 

@@ -27,6 +27,10 @@ services:
         fromDatabase:
           name: zk-fitness-db
           property: connectionString
+      # Render's managed PostgreSQL certificate is self-signed. TLS remains
+      # enabled, but hostname verification must be disabled for this service.
+      - key: DB_SSL_REJECT_UNAUTHORIZED
+        value: false
       - key: JWT_SECRET
         generateValue: true
       - key: CLIENT_ORIGIN

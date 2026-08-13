@@ -11,6 +11,7 @@ The API needs these environment variables:
 | Variable | Purpose |
 | --- | --- |
 | `DATABASE_URL` or `DB_*` variables | PostgreSQL connection details |
+| `DB_SSL_REJECT_UNAUTHORIZED` | Set to `false` for Render's managed PostgreSQL certificate |
 | `JWT_SECRET` | Secret used to sign session cookies |
 | `CLIENT_ORIGIN` | The frontend origin allowed to make state-changing requests |
 
@@ -56,12 +57,15 @@ The migration does not silently delete legacy users or sync records. If an exist
 
 `render.yaml` provides a Render Blueprint for the backend and its PostgreSQL database. The service is pinned to `main`, waits for CI checks, runs migrations during its production startup command, and exposes `/api/health` as its health check. Running the migration at startup keeps the Blueprint compatible with Render's free web service plan, which does not provide pre-deploy commands.
 
+Render's managed PostgreSQL endpoint uses a self-signed certificate. The Blueprint keeps the connection encrypted with TLS and sets `DB_SSL_REJECT_UNAUTHORIZED=false` because Render does not provide a public CA chain for this connection. The database URL's SSL query parameters are removed before `pg` receives it so this explicit TLS setting is not overwritten.
+
 1. Create a Render Blueprint from this repository and the `main` branch.
 2. Accept the generated `JWT_SECRET` and the managed Postgres connection exposed by the Blueprint.
 3. Confirm `CLIENT_ORIGIN` is `https://samueladegnan.github.io`.
-4. Confirm the service uses `npm run start:prod`, which applies the migration before starting the API.
-5. Use the service health check at `/api/health` after deployment.
-6. Confirm the service URL and cookie behavior before pointing a hosted frontend at it.
+4. Confirm `DB_SSL_REJECT_UNAUTHORIZED` is `false` for the Render-managed database connection.
+5. Confirm the service uses `npm run start:prod`, which applies the migration before starting the API.
+6. Use the service health check at `/api/health` after deployment.
+7. Confirm the service URL and cookie behavior before pointing a hosted frontend at it.
 
 The default Pages build uses `https://zk-fitness-api.onrender.com/api`. Set the `ZK_API_BASE` Actions repository variable if the service uses a different public URL.
 
